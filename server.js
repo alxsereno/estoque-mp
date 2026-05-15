@@ -11,7 +11,7 @@ const pool = new Pool({
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // ── PRODUTOS ──────────────────────────────────────────────
 app.get('/api/produtos', async (req, res) => {
@@ -244,7 +244,7 @@ app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date() }));
 
 // ── FRONTEND (catch-all) ──────────────────────────────────
 app.get('*', (_, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
