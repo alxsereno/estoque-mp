@@ -1094,9 +1094,12 @@ tr:hover td{background:#fafaf7}
       </div>
     </div>
     <div class="btn-row" style="margin-top:16px;flex-wrap:wrap;gap:10px">
+      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="baixarBackup()">⬇ Baixar Backup</button>
+      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="abrirCarregadorBackup()">⬆ Carregar Backup</button>
       <button class="btn btn-sm" style="color:#b8860b;border-color:#f0d070" onclick="limparMovimentacoes()">Apagar movimentações de estoque</button>
       <button class="btn btn-danger" onclick="limparTodosDados()">Apagar todos os dados operacionais</button>
     </div>
+    <input type="file" id="input-backup" accept=".json" style="display:none" onchange="carregarBackup(event)">
     <div style="font-size:11px;color:#aaa;margin-top:8px;line-height:1.6">
       <strong>Apagar movimentações:</strong> zera lotes, embalagens e histórico. Produtos e fornecedores são mantidos.<br>
       <strong>Apagar tudo:</strong> remove também fornecedores e produtos cadastrados manualmente.
@@ -3321,6 +3324,119 @@ salvarConfig = function(){
     apiPost('/config',{chave:'etiqueta',valor:cfgEtiqueta}).catch(()=>{});
   }
 };
+
+
+// ══════════════════════════════════════════════════════
+//  BACKUP — Exportar e importar dados
+// ══════════════════════════════════════════════════════
+
+function baixarBackup(){
+  const backup = {
+    versao: '1.0',
+    data: new Date().toISOString(),
+    fornecedores: fornecedores.filter(f=>f.origem==='manual'),
+    produtos: produtos.filter(p=>p.origem==='manual'),
+    lotes: lotes,
+    embalagens: embalagens,
+    movimentacoes: movs,
+    ajustes: ajustes,
+    configuracoes: {
+      validade: cfgValidade,
+      etiqueta: cfgEtiqueta
+    }
+  };
+  
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'estoque-mp-backup-' + new Date().toISOString().split('T')[0] + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Backup baixado com sucesso');
+}
+
+function abrirCarregadorBackup(){
+  document.getElementById('input-backup').click();
+}
+
+function carregarBackup(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      const backup = JSON.parse(e.target.result);
+      if(!backup.versao || !backup.fornecedores){
+        toast('Arquivo inválido — não é um backup válido do Estoque MP');
+        return;
+      }
+      
+      // Confirmar antes de sobrescrever
+      if(!confirm('Carregar backup de ' + new Date(backup.data).toLocaleDateString('pt-BR') + '?\n\nIsso vai sobrescrever todos os dados operacionais.\n\nContinuar?')) return;
+      
+      // Limpar dados atuais
+      fornecedores = [];
+      produtos = [];
+      lotes = [];
+      embalagens = [];
+      movs = [];
+      ajustes = [];
+      
+      // Carregar dados do backup
+      // Manter produtos importados, adicionar os manuais do backup
+      produtos = PRODUTOS_INICIAIS.map(p=>({...p,origem:'importado'}));
+      if(backup.produtos){
+        backup.produtos.forEach(p=>{
+          if(!produtos.find(x=>String(x.codigo)===String(p.codigo))){
+            produtos.push({...p, origem:'manual'});
+          }
+        });
+      }
+      
+      // Manter fornecedores importados, adicionar os manuais do backup
+      fornecedores = FORNECEDORES_INICIAIS.map(f=>({...f, origem:'importado'}));
+      if(backup.fornecedores){
+        backup.fornecedores.forEach(f=>{
+          if(!fornecedores.find(x=>x.id===f.id)){
+            fornecedores.push({...f, origem:'manual'});
+          }
+        });
+      }
+      
+      // Restaurar dados operacionais
+      if(backup.lotes) lotes = backup.lotes;
+      if(backup.embalagens) embalagens = backup.embalagens;
+      if(backup.movimentacoes) movs = backup.movimentacoes;
+      if(backup.ajustes) ajustes = backup.ajustes;
+      
+      // Restaurar configurações
+      if(backup.configuracoes){
+        if(backup.configuracoes.validade) cfgValidade = {...cfgValidade, ...backup.configuracoes.validade};
+        if(backup.configuracoes.etiqueta) cfgEtiqueta = {...cfgEtiqueta, ...backup.configuracoes.etiqueta};
+      }
+      
+      // Salvar no localStorage
+      salvarAuto();
+      carregarConfig();
+      
+      toast('Backup carregado com sucesso! Atualizando telas...');
+      setTimeout(()=>{ location.reload(); }, 1000);
+      
+    } catch(err){
+      console.error(err);
+      toast('Erro ao carregar backup: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  
+  // Limpar input para permitir selecionar o mesmo arquivo novamente
+  event.target.value = '';
+}
 
 </script>
 </body>
