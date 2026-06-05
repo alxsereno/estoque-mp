@@ -1095,6 +1095,7 @@ tr:hover td{background:#fafaf7}
     </div>
     <div class="btn-row" style="margin-top:16px;flex-wrap:wrap;gap:10px">
       <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="baixarBackup()">⬇ Baixar Backup</button>
+      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="exportarBackupCSV()">⬇ Baixar Backup (CSV)</button>
       <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="abrirCarregadorBackup()">⬆ Carregar Backup</button>
       <button class="btn btn-sm" style="color:#b8860b;border-color:#f0d070" onclick="limparMovimentacoes()">Apagar movimentações de estoque</button>
       <button class="btn btn-danger" onclick="limparTodosDados()">Apagar todos os dados operacionais</button>
@@ -3436,6 +3437,42 @@ function carregarBackup(event){
   
   // Limpar input para permitir selecionar o mesmo arquivo novamente
   event.target.value = '';
+}
+
+
+// ══════════════════════════════════════════════════════
+//  BACKUP CSV
+// ══════════════════════════════════════════════════════
+
+function exportarBackupCSV(){
+  // Headers
+  const headers = ['Data','Tipo','Produto','Código','Lote','Quantidade','Destino'];
+  
+  // Converter movimentações para CSV
+  const csvLines = [headers.join(',')];
+  
+  movs.forEach(m => {
+    const row = [
+      m.data,
+      m.tipo,
+      m.produto,
+      m.codigo,
+      m.lote,
+      m.quantidade,
+      m.destino
+    ].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',');
+    csvLines.push(row);
+  });
+  
+  const csv = csvLines.join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'estoque-mp-backup-'+new Date().toISOString().split('T')[0]+'.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+  
+  toast('Backup CSV baixado com sucesso');
 }
 
 </script>
