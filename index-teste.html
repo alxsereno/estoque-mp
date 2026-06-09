@@ -427,16 +427,18 @@ async function testarCriarProduto(){
       return;
     }
     
-    produtos.push(result.produto);
-    atualizarStatus();
-    
-    document.getElementById('prod-codigo').value = '';
-    document.getElementById('prod-descricao').value = '';
-    document.getElementById('prod-categoria').value = '';
-    document.getElementById('prod-unidade').value = '';
-    
-    mostrarAlerta('✅ Produto criado no PostgreSQL! ID: ' + result.produto.id, 'success');
-    console.log('Produto criado:', result.produto);
+    if(result.produto){
+      produtos.push(result.produto);
+      atualizarStatus();
+      
+      document.getElementById('prod-codigo').value = '';
+      document.getElementById('prod-descricao').value = '';
+      document.getElementById('prod-categoria').value = '';
+      document.getElementById('prod-unidade').value = '';
+      
+      mostrarAlerta('✅ Produto criado no PostgreSQL!', 'success');
+      console.log('Produto criado:', result.produto);
+    }
     
   } catch(e){
     mostrarAlerta('❌ Erro: ' + e.message, 'error');
@@ -468,16 +470,18 @@ async function testarCriarFornecedor(){
       return;
     }
     
-    fornecedores.push(result.fornecedor);
-    atualizarStatus();
-    
-    document.getElementById('forn-nome').value = '';
-    document.getElementById('forn-cnpj').value = '';
-    document.getElementById('forn-telefone').value = '';
-    document.getElementById('forn-email').value = '';
-    
-    mostrarAlerta('✅ Fornecedor criado no PostgreSQL! ID: ' + result.fornecedor.id, 'success');
-    console.log('Fornecedor criado:', result.fornecedor);
+    if(result.fornecedor){
+      fornecedores.push(result.fornecedor);
+      atualizarStatus();
+      
+      document.getElementById('forn-nome').value = '';
+      document.getElementById('forn-cnpj').value = '';
+      document.getElementById('forn-telefone').value = '';
+      document.getElementById('forn-email').value = '';
+      
+      mostrarAlerta('✅ Fornecedor criado no PostgreSQL!', 'success');
+      console.log('Fornecedor criado:', result.fornecedor);
+    }
     
   } catch(e){
     mostrarAlerta('❌ Erro: ' + e.message, 'error');
