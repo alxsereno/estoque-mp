@@ -240,6 +240,52 @@ app.post('/api/config', async (req, res) => {
 });
 
 
+
+// ── BUSCAR DADOS DO BANCO ───────────────────────────────────
+app.get('/api/embalagens', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM embalagens ORDER BY id DESC LIMIT 1000'
+    );
+    res.json(result.rows);
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/lotes', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM lotes ORDER BY id DESC LIMIT 1000'
+    );
+    res.json(result.rows);
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/movimentacoes', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM movimentacoes ORDER BY id DESC LIMIT 1000'
+    );
+    res.json(result.rows);
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/ajustes', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM ajustes ORDER BY id DESC LIMIT 1000'
+    );
+    res.json(result.rows);
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── IMPORTAR DADOS ───────────────────────────────────
 app.post('/api/importar-lotes', async (req, res) => {
   const { lotes } = req.body;

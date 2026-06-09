@@ -1230,6 +1230,52 @@ function limparTodosDados(){
 }
 
 let _saveTimer = null;
+
+// ═══════════════════════════════════════════════════════════
+// CARREGAR DADOS DO POSTGRESQL VIA API
+// ═══════════════════════════════════════════════════════════
+
+async function carregarDadosDoBanco(){
+  try {
+    console.log('Carregando dados do PostgreSQL...');
+    
+    const [embalagensResp, movResp, ajustesResp] = await Promise.all([
+      fetch('/api/embalagens'),
+      fetch('/api/movimentacoes'),
+      fetch('/api/ajustes')
+    ]);
+    
+    if(embalagensResp.ok){
+      const dados = await embalagensResp.json();
+      embalagens = dados || [];
+      console.log('✓ Embalagens carregadas:', embalagens.length);
+    }
+    
+    if(movResp.ok){
+      const dados = await movResp.json();
+      movs = dados || [];
+      console.log('✓ Movimentações carregadas:', movs.length);
+    }
+    
+    if(ajustesResp.ok){
+      const dados = await ajustesResp.json();
+      ajustes = dados || [];
+      console.log('✓ Ajustes carregados:', ajustes.length);
+    }
+    
+    // Atualizar interface
+    atualizarDashboard();
+    
+  } catch(e){
+    console.error('Erro ao carregar dados:', e);
+    toast('⚠️ Erro ao carregar dados do banco');
+  }
+}
+
+// Carregar dados assim que a página inicia
+document.addEventListener('DOMContentLoaded', carregarDadosDoBanco);
+
+
 function salvarAuto(){
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(salvarDados, 400);
@@ -3606,15 +3652,14 @@ function parseCSV(line){
 }
 </script>
 </body>
-</html  <div class="card">
-    <div class="card-title">Backup em CSV</div>
+</html  
     <p style="font-size:12px;color:#666;margin-bottom:16px;">Exporte todos os dados em CSV ou importe um backup.</p>
     
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="baixarBackupCSV()">⬇ Baixar CSV</button>
-      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="document.getElementById('input-csv').click()">⬆ Carregar CSV</button>
+      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="baixarBackupCSV()"></button>
+      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="document.getElementById('input-csv').click()"></button>
     </div>
-    <input type="file" id="input-csv" accept=".csv" style="display:none" onchange="carregarBackupCSV(event)">
+    <input type="file" id="input-csv" accept=".csv" style="display:none" >
   </div>
 
 >
