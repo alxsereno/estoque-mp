@@ -239,6 +239,77 @@ app.post('/api/config', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+
+// ── IMPORTAR DADOS ───────────────────────────────────
+app.post('/api/importar-lotes', async (req, res) => {
+  const { lotes } = req.body;
+  
+  if(!Array.isArray(lotes) || lotes.length === 0){
+    return res.status(400).json({ error: 'Nenhum lote para importar' });
+  }
+  
+  try {
+    let importados = 0;
+    let duplicados = 0;
+    let erros = 0;
+    
+    for(const lote of lotes){
+      try {
+        // Verificar se já existe
+        const existe = await pool.query(
+          'SELECT id FROM embalagens WHERE codigo = $1',
+          [lote.codigo]
+        );
+        
+        if(existe.rows.length > 0){
+          duplicados++;
+          continue;
+        }
+        
+        // Inserir novo lote
+        await pool.query(
+          `INSERT INTO embalagens
+            (codigo, codigo_lote, produto_descricao, categoria, quantidade,
+             quantidade_atual, unidade, data_validade, data_entrada,
+             fornecedor, status, is_residuo, impressa)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          [
+            lote.codigo,
+            lote.codigo_lote,
+            lote.produto_descricao,
+            lote.categoria,
+            lote.quantidade,
+            lote.quantidade,
+            lote.unidade,
+            lote.data_validade,
+            lote.data_entrada,
+            lote.fornecedor,
+            lote.status || 'OK',
+            lote.is_residuo || false,
+            true
+          ]
+        );
+        
+        importados++;
+      } catch(e){
+        console.error('Erro ao importar lote:', e.message);
+        erros++;
+      }
+    }
+    
+    res.json({
+      ok: true,
+      importados,
+      duplicados,
+      erros,
+      total: importados + duplicados + erros
+    });
+    
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── HEALTH CHECK ──────────────────────────────────────────
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date() }));
 

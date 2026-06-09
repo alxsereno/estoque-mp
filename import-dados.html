@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Importar Dados - Estoque MP</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  max-width: 600px;
+  width: 100%;
+  padding: 40px;
+}
+
+h1 { 
+  color: #333;
+  margin-bottom: 10px;
+  font-size: 28px;
+}
+
+.subtitle {
+  color: #666;
+  margin-bottom: 30px;
+  font-size: 14px;
+}
+
+.card {
+  background: #f9f9f9;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  padding: 30px;
+  text-align: center;
+  margin-bottom: 20px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.card:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.card.drag-over {
+  border-color: #667eea;
+  background: #e8effe;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+}
+
+.card-text {
+  color: #666;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.button {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.button:hover {
+  background: #764ba2;
+}
+
+.button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.button.secondary {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.button.secondary:hover {
+  background: #d0d0d0;
+}
+
+.progress {
+  display: none;
+  margin: 20px 0;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  width: 0%;
+  transition: width 0.3s;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: #666;
+  text-align: center;
+}
+
+.resultado {
+  display: none;
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.resultado.success {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+}
+
+.resultado.error {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+}
+
+.resultado.info {
+  background: #d1ecf1;
+  border: 1px solid #bee5eb;
+  color: #0c5460;
+}
+
+.info-box {
+  background: #e8effe;
+  border-left: 4px solid #667eea;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #333;
+}
+
+.info-box strong {
+  color: #667eea;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>📥 Importar Dados</h1>
+  <p class="subtitle">Carregue o CSV com os dados de estoque</p>
+
+  <div class="info-box">
+    <strong>ℹ️ Como funciona:</strong><br>
+    1. Selecione o arquivo CSV com os dados<br>
+    2. Clique em "Importar"<br>
+    3. Os dados serão enviados para o servidor<br>
+    4. Tudo será salvo no banco de dados PostgreSQL
+  </div>
+
+  <div class="card" onclick="document.getElementById('csvFile').click()">
+    <div class="icon">📄</div>
+    <div class="card-text">
+      <strong>Clique aqui ou arraste o arquivo CSV</strong><br>
+      estoque_mp_2026-06-09.csv
+    </div>
+  </div>
+
+  <input type="file" id="csvFile" accept=".csv" onchange="selecionouArquivo(event)">
+
+  <button class="button" id="btnImportar" onclick="importarDados()" disabled>
+    📤 Importar Dados
+  </button>
+
+  <button class="button secondary" onclick="limparSeleção()">
+    Cancelar
+  </button>
+
+  <div class="progress" id="progresso">
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-text" id="progressText">Carregando... 0%</div>
+  </div>
+
+  <div class="resultado" id="resultado"></div>
+</div>
+
+<script>
+let arquivoSelecionado = null;
+const cardElement = document.querySelector('.card');
+
+// Drag and drop
+cardElement.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  cardElement.classList.add('drag-over');
+});
+
+cardElement.addEventListener('dragleave', () => {
+  cardElement.classList.remove('drag-over');
+});
+
+cardElement.addEventListener('drop', (e) => {
+  e.preventDefault();
+  cardElement.classList.remove('drag-over');
+  const files = e.dataTransfer.files;
+  if(files.length > 0) {
+    document.getElementById('csvFile').files = files;
+    selecionouArquivo({ target: { files } });
+  }
+});
+
+function selecionouArquivo(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+
+  if(!file.name.endsWith('.csv')) {
+    mostrarResultado('❌ Selecione um arquivo CSV válido', 'error');
+    return;
+  }
+
+  arquivoSelecionado = file;
+  document.querySelector('.card-text').innerHTML = `
+    <strong>✓ Arquivo selecionado:</strong><br>
+    ${file.name}<br>
+    (${(file.size / 1024).toFixed(2)} KB)
+  `;
+  document.getElementById('btnImportar').disabled = false;
+}
+
+function limparSeleção() {
+  arquivoSelecionado = null;
+  document.getElementById('csvFile').value = '';
+  document.querySelector('.card-text').innerHTML = `
+    <strong>Clique aqui ou arraste o arquivo CSV</strong><br>
+    estoque_mp_2026-06-09.csv
+  `;
+  document.getElementById('btnImportar').disabled = true;
+  document.getElementById('resultado').style.display = 'none';
+  document.getElementById('progresso').style.display = 'none';
+}
+
+function mostrarResultado(msg, tipo) {
+  const el = document.getElementById('resultado');
+  el.textContent = msg;
+  el.className = 'resultado ' + tipo;
+  el.style.display = 'block';
+}
+
+async function importarDados() {
+  if(!arquivoSelecionado) {
+    mostrarResultado('❌ Nenhum arquivo selecionado', 'error');
+    return;
+  }
+
+  document.getElementById('btnImportar').disabled = true;
+  document.getElementById('progresso').style.display = 'block';
+  document.getElementById('resultado').style.display = 'none';
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const text = e.target.result;
+      const lines = text.trim().split('\n');
+
+      if(lines.length < 2) {
+        mostrarResultado('❌ Arquivo vazio ou inválido', 'error');
+        document.getElementById('btnImportar').disabled = false;
+        return;
+      }
+
+      mostrarResultado('🔄 Processando arquivo...', 'info');
+
+      // Parsear CSV
+      const lotes = [];
+      const header = parseCSVLine(lines[0]);
+
+      for(let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if(!line) continue;
+
+        const cells = parseCSVLine(line);
+        if(cells.length < 11) continue;
+
+        // Converter DD/MM/YYYY para YYYY-MM-DD
+        const converterData = (data) => {
+          if(!data) return '';
+          if(/^\d{2}\/\d{2}\/\d{4}$/.test(data)) {
+            const [dia, mes, ano] = data.split('/');
+            return `${ano}-${mes}-${dia}`;
+          }
+          return data;
+        };
+
+        const lote = {
+          codigo: cells[2],                    // Embalagem
+          codigo_lote: cells[3],               // Lote
+          produto_descricao: cells[1],         // Produto
+          categoria: cells[0],                 // Categoria
+          quantidade: parseFloat(cells[4]),    // Quantidade
+          unidade: cells[5],                   // Unidade
+          data_validade: converterData(cells[6]), // Validade
+          data_entrada: converterData(cells[10]), // Data entrada
+          fornecedor: cells[9],                // Fornecedor
+          status: cells[7] || 'OK',            // Status
+          is_residuo: cells[8] === 'Sim'       // Resíduo
+        };
+
+        lotes.push(lote);
+
+        // Atualizar progresso
+        const percentual = Math.round((i / (lines.length - 1)) * 100);
+        document.getElementById('progressFill').style.width = percentual + '%';
+        document.getElementById('progressText').textContent = `Processando... ${percentual}%`;
+      }
+
+      if(lotes.length === 0) {
+        mostrarResultado('❌ Nenhum registro encontrado no arquivo', 'error');
+        document.getElementById('btnImportar').disabled = false;
+        return;
+      }
+
+      // Enviar para servidor
+      document.getElementById('progressText').textContent = 'Enviando para servidor...';
+
+      const response = await fetch('/api/importar-lotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lotes })
+      });
+
+      if(!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro no servidor');
+      }
+
+      const result = await response.json();
+
+      mostrarResultado(
+        '✅ ' + result.importados + ' registros importados com sucesso!\n\n' +
+        (result.duplicados > 0 ? '⚠️ ' + result.duplicados + ' registros duplicados (já existiam)\n\n' : '') +
+        (result.erros > 0 ? '❌ ' + result.erros + ' erros\n\n' : '') +
+        'Os dados estão agora no banco de dados PostgreSQL.',
+        'success'
+      );
+
+      document.getElementById('progresso').style.display = 'none';
+      document.getElementById('btnImportar').disabled = false;
+      setTimeout(() => limparSeleção(), 2000);
+
+    } catch(err) {
+      console.error(err);
+      mostrarResultado('❌ Erro: ' + err.message, 'error');
+      document.getElementById('btnImportar').disabled = false;
+    }
+  };
+
+  reader.readAsText(arquivoSelecionado, 'UTF-8');
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for(let i = 0; i < line.length; i++) {
+    const c = line[i];
+    const next = line[i+1];
+
+    if(c === '"') {
+      if(inQuotes && next === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if(c === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += c;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+</script>
+
+</body>
+</html>

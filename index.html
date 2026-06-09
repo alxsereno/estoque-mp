@@ -3475,6 +3475,146 @@ function exportarBackupCSV(){
   toast('Backup CSV baixado com sucesso');
 }
 
+
+
+// ═══════════════════════════════════════════════════════════
+// BACKUP CSV - SEM MODIFICAÇÕES NO RESTO DO CÓDIGO
+// ═══════════════════════════════════════════════════════════
+
+function baixarBackupCSV(){
+  const headers = ['Categoria','Produto','Embalagem','Lote','Quantidade','Unidade','Validade','Status','Resíduo','Fornecedor','Data entrada'];
+  const csvLines = [headers.join(',')];
+  
+  if(embalagens && embalagens.length){
+    embalagens.forEach(emb => {
+      const linha = [
+        emb.categoria || '',
+        emb.produto_descricao || '',
+        emb.codigo || '',
+        emb.codigo_lote || '',
+        emb.quantidade || 0,
+        emb.unidade || '',
+        emb.data_validade || '',
+        emb.status || 'OK',
+        emb.is_residuo ? 'Sim' : 'Não',
+        emb.fornecedor || '—',
+        emb.data_entrada || ''
+      ];
+      
+      const csvLinha = linha.map(v => {
+        const s = String(v);
+        if(s.includes(',') || s.includes('"')) return '"' + s.replace(/"/g,'""') + '"';
+        return s;
+      }).join(',');
+      csvLines.push(csvLinha);
+    });
+  }
+  
+  const csv = csvLines.join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'backup-' + new Date().toISOString().split('T')[0] + '.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+  
+  toast('✓ Backup baixado!');
+}
+
+function carregarBackupCSV(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      const text = e.target.result;
+      const lines = text.trim().split('\n');
+      
+      if(lines.length < 2){
+        toast('Arquivo vazio!');
+        return;
+      }
+      
+      if(!confirm('Carregar ' + (lines.length-1) + ' registros?')) return;
+      
+      let add = 0, dup = 0;
+      
+      for(let i = 1; i < lines.length; i++){
+        const cells = parseCSV(lines[i]);
+        if(cells.length < 11) continue;
+        
+        const codigo = cells[2];
+        const existe = embalagens.find(e => e.codigo === codigo);
+        if(existe){ dup++; continue; }
+        
+        embalagens.push({
+          codigo: codigo,
+          produto_descricao: cells[1].toUpperCase(),
+          categoria: cells[0],
+          codigo_lote: cells[3],
+          quantidade: parseFloat(cells[4]) || 0,
+          quantidade_atual: parseFloat(cells[4]) || 0,
+          unidade: cells[5],
+          data_validade: cells[6],
+          status: cells[7] || 'OK',
+          is_residuo: cells[8] === 'Sim',
+          fornecedor: cells[9],
+          data_entrada: cells[10],
+          impressa: true
+        });
+        add++;
+      }
+      
+      if(add > 0){
+        salvarAuto();
+        toast('✓ Carregado: ' + add + ' registros' + (dup > 0 ? ' (' + dup + ' duplicados)' : ''));
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        toast('Nenhum novo registro');
+      }
+    } catch(err){
+      console.error(err);
+      toast('Erro: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function parseCSV(line){
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for(let i = 0; i < line.length; i++){
+    const c = line[i];
+    const next = line[i+1];
+    
+    if(c === '"'){
+      if(inQuotes && next === '"'){ current += '"'; i++; }
+      else { inQuotes = !inQuotes; }
+    } else if(c === ',' && !inQuotes){
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += c;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
 </script>
 </body>
-</html>
+</html  <div class="card">
+    <div class="card-title">Backup em CSV</div>
+    <p style="font-size:12px;color:#666;margin-bottom:16px;">Exporte todos os dados em CSV ou importe um backup.</p>
+    
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="baixarBackupCSV()">⬇ Baixar CSV</button>
+      <button class="btn btn-sm" style="color:#1b7db8;border-color:#70c8f0" onclick="document.getElementById('input-csv').click()">⬆ Carregar CSV</button>
+    </div>
+    <input type="file" id="input-csv" accept=".csv" style="display:none" onchange="carregarBackupCSV(event)">
+  </div>
+
+>
