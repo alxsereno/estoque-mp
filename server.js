@@ -266,13 +266,12 @@ app.post('/api/importar-lotes', async (req, res) => {
           continue;
         }
         
-        // Inserir novo lote
+        // Inserir novo lote (CAMPOS QUE EXISTEM NA TABELA)
         await pool.query(
           `INSERT INTO embalagens
             (codigo, codigo_lote, produto_descricao, categoria, quantidade,
-             quantidade_atual, unidade, data_validade, data_entrada,
-             fornecedor, status, is_residuo, impressa)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+             quantidade_atual, unidade, data_validade, status, is_residuo, impressa)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
             lote.codigo,
             lote.codigo_lote,
@@ -282,9 +281,7 @@ app.post('/api/importar-lotes', async (req, res) => {
             lote.quantidade,
             lote.unidade,
             lote.data_validade,
-            lote.data_entrada,
-            lote.fornecedor,
-            lote.status || 'OK',
+            lote.status || 'disponivel',
             lote.is_residuo || false,
             true
           ]
