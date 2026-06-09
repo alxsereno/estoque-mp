@@ -3258,6 +3258,12 @@ async function carregarDoPostgres(){
     if(typeof salvarAuto === 'function'){
       salvarAuto();
       console.log('✓ Dados salvos em localStorage');
+      
+      // Recarregar para interface renderizar com novos dados
+      setTimeout(() => {
+        console.log('✓ Recarregando página com novos dados...');
+        location.reload();
+      }, 500);
     }
   } catch(e){
     console.log('Erro ao carregar:', e.message);
