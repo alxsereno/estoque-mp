@@ -245,7 +245,7 @@ app.post('/api/config', async (req, res) => {
 app.get('/api/embalagens', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM embalagens ORDER BY id DESC LIMIT 1000'
+      'SELECT * FROM embalagens ORDER BY id DESC LIMIT 5000'
     );
     res.json(result.rows);
   } catch(e){
@@ -281,6 +281,118 @@ app.get('/api/ajustes', async (req, res) => {
       'SELECT * FROM ajustes ORDER BY id DESC LIMIT 1000'
     );
     res.json(result.rows);
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/produtos', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM produtos ORDER BY id DESC LIMIT 5000'
+    );
+    res.json(result.rows);
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/fornecedores', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM fornecedores ORDER BY id DESC LIMIT 1000'
+    );
+    res.json(result.rows);
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── CRIAR NOVOS PRODUTOS ─────────────────────────────────────
+app.post('/api/produtos', async (req, res) => {
+  const { codigo, descricao, categoria, unidade } = req.body;
+  
+  if(!codigo || !descricao){
+    return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
+  }
+  
+  try {
+    const result = await pool.query(
+      `INSERT INTO produtos (codigo, descricao, categoria, unidade, origem)
+       VALUES ($1, $2, $3, $4, 'manual')
+       RETURNING *`,
+      [codigo, descricao, categoria, unidade]
+    );
+    res.json({ ok: true, produto: result.rows[0] });
+  } catch(e){
+    if(e.code === '23505'){
+      res.status(400).json({ error: 'Código de produto já existe' });
+    } else {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
+
+// ── CRIAR NOVOS FORNECEDORES ─────────────────────────────────
+app.post('/api/fornecedores', async (req, res) => {
+  const { nome, razao, cnpj, telefone, email, contato, obs } = req.body;
+  
+  if(!nome){
+    return res.status(400).json({ error: 'Nome é obrigatório' });
+  }
+  
+  try {
+    const result = await pool.query(
+      `INSERT INTO fornecedores (nome, razao, cnpj, telefone, email, contato, obs, origem)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual')
+       RETURNING *`,
+      [nome, razao || '', cnpj || '', telefone || '', email || '', contato || '', obs || '']
+    );
+    res.json({ ok: true, fornecedor: result.rows[0] });
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── REGISTRAR MOVIMENTAÇÕES ──────────────────────────────────
+app.post('/api/movimentacoes', async (req, res) => {
+  const { data, tipo, produto, codigo, lote, quantidade, destino } = req.body;
+  
+  if(!tipo || !codigo){
+    return res.status(400).json({ error: 'Tipo e código são obrigatórios' });
+  }
+  
+  try {
+    const result = await pool.query(
+      `INSERT INTO movimentacoes (data, tipo, produto, codigo, lote, quantidade, destino)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [data || new Date().toISOString().split('T')[0], tipo, produto, codigo, lote, quantidade, destino]
+    );
+    res.json({ ok: true, movimentacao: result.rows[0] });
+  } catch(e){
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── REGISTRAR AJUSTES ────────────────────────────────────────
+app.post('/api/ajustes', async (req, res) => {
+  const { data, codigo, produto, lote, antes, depois, motivo, obs } = req.body;
+  
+  if(!codigo || antes === undefined || depois === undefined){
+    return res.status(400).json({ error: 'Código, antes e depois são obrigatórios' });
+  }
+  
+  const diff = parseFloat(depois) - parseFloat(antes);
+  
+  try {
+    const result = await pool.query(
+      `INSERT INTO ajustes (data, codigo, produto, lote, antes, depois, diff, motivo, obs)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [data || new Date().toISOString().split('T')[0], codigo, produto, lote, antes, depois, diff, motivo, obs]
+    );
+    res.json({ ok: true, ajuste: result.rows[0] });
   } catch(e){
     res.status(500).json({ error: e.message });
   }
