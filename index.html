@@ -1266,14 +1266,6 @@ async function carregarDadosDoPostgres(){
     
     console.log('✓ Dados carregados do PostgreSQL');
     
-    // Salvar em localStorage para sincronizar com interface
-    salvarAuto();
-    
-    // Aguardar 500ms e recarregar a página para a interface atualizar
-    setTimeout(() => {
-      location.reload();
-    }, 500);
-    
   } catch(e){
     console.log('Erro ao carregar dados:', e.message);
   }
