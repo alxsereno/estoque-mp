@@ -13,11 +13,19 @@
 --    produto/entrada não tem código de barras de fábrica.
 -- ═══════════════════════════════════════════════════════════
 
+-- Categorias cadastradas pelo usuário (tela de Configurações)
+CREATE TABLE IF NOT EXISTS categorias (
+  id         SERIAL PRIMARY KEY,
+  nome       VARCHAR(100) UNIQUE NOT NULL,
+  cor        VARCHAR(20),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS produtos (
   id         SERIAL PRIMARY KEY,
   codigo     VARCHAR(50)  UNIQUE NOT NULL,   -- código interno (ex: 001)
   descricao  VARCHAR(300) NOT NULL,
-  categoria  VARCHAR(100),
+  categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
   unidade    VARCHAR(10)  NOT NULL DEFAULT 'kg', -- unidade BASE de controle de estoque
   estoque_minimo NUMERIC(12,4),
   origem     VARCHAR(20) DEFAULT 'manual',
@@ -115,6 +123,7 @@ CREATE TABLE IF NOT EXISTS configuracoes (
 );
 
 -- Índices para performance
+CREATE INDEX IF NOT EXISTS idx_produtos_categoria ON produtos(categoria_id);
 CREATE INDEX IF NOT EXISTS idx_lotes_produto    ON lotes(produto_id);
 CREATE INDEX IF NOT EXISTS idx_lotes_status      ON lotes(status);
 CREATE INDEX IF NOT EXISTS idx_lotes_validade    ON lotes(data_validade);
@@ -128,6 +137,43 @@ INSERT INTO configuracoes (chave, valor) VALUES
   ('validade',  '{"critico":7,"atencao":30}'),
   ('etiqueta',  '{"larguraMm":100,"alturaMm":60,"dpi":203}')
 ON CONFLICT (chave) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════
+-- MIGRAÇÃO: se você já rodou uma versão anterior deste schema.sql
+-- (v2 inicial, com produtos.categoria como texto livre), este bloco
+-- converte automaticamente para a nova estrutura com categoria_id,
+-- sem perder os dados já cadastrados. É seguro rodar mesmo em banco
+-- novo (não faz nada se as colunas já estiverem certas).
+-- ═══════════════════════════════════════════════════════════
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='produtos' AND column_name='categoria'
+  ) THEN
+    -- garante que categoria_id existe
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='produtos' AND column_name='categoria_id'
+    ) THEN
+      ALTER TABLE produtos ADD COLUMN categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL;
+    END IF;
+
+    -- cria uma categoria para cada valor de texto distinto já usado
+    INSERT INTO categorias (nome)
+    SELECT DISTINCT categoria FROM produtos
+    WHERE categoria IS NOT NULL AND btrim(categoria) <> ''
+    ON CONFLICT (nome) DO NOTHING;
+
+    -- associa cada produto à categoria correspondente
+    UPDATE produtos p SET categoria_id = c.id
+    FROM categorias c
+    WHERE c.nome = p.categoria AND p.categoria_id IS NULL;
+
+    -- remove a coluna antiga de texto livre (dado já preservado em categoria_id)
+    ALTER TABLE produtos DROP COLUMN categoria;
+  END IF;
+END $$;
 
 -- ═══════════════════════════════════════════════════════════
 -- MIGRAÇÃO A PARTIR DA v1 (opcional)

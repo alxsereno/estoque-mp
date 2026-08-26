@@ -14,27 +14,80 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ═══════════════════════════════════════════════════════════
+// CATEGORIAS
+// ═══════════════════════════════════════════════════════════
+app.get('/api/categorias', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.*, COUNT(p.id) AS total_produtos
+       FROM categorias c LEFT JOIN produtos p ON p.categoria_id = c.id AND p.ativo = TRUE
+       GROUP BY c.id ORDER BY c.nome`
+    );
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/categorias', async (req, res) => {
+  const { nome, cor } = req.body;
+  if(!nome) return res.status(400).json({ error: 'Nome da categoria é obrigatório' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO categorias (nome, cor) VALUES ($1,$2) RETURNING *`,
+      [nome.trim(), cor || null]
+    );
+    res.json({ ok: true, categoria: rows[0] });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Essa categoria já existe' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/categorias/:id', async (req, res) => {
+  const { nome, cor } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE categorias SET nome=$1, cor=$2 WHERE id=$3 RETURNING *`,
+      [nome, cor || null, req.params.id]
+    );
+    res.json({ ok: true, categoria: rows[0] });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Essa categoria já existe' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/categorias/:id', async (req, res) => {
+  try {
+    // produtos ligados a essa categoria ficam sem categoria (ON DELETE SET NULL)
+    await pool.query(`DELETE FROM categorias WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
 // PRODUTOS
 // ═══════════════════════════════════════════════════════════
 app.get('/api/produtos', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM produtos WHERE ativo = TRUE ORDER BY descricao`
+      `SELECT p.*, c.nome AS categoria
+       FROM produtos p LEFT JOIN categorias c ON c.id = p.categoria_id
+       WHERE p.ativo = TRUE ORDER BY p.descricao`
     );
     res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/produtos', async (req, res) => {
-  const { codigo, descricao, categoria, unidade, estoque_minimo } = req.body;
+  const { codigo, descricao, categoria_id, unidade, estoque_minimo } = req.body;
   if(!codigo || !descricao){
     return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO produtos (codigo, descricao, categoria, unidade, estoque_minimo, origem)
+      `INSERT INTO produtos (codigo, descricao, categoria_id, unidade, estoque_minimo, origem)
        VALUES ($1,$2,$3,$4,$5,'manual') RETURNING *`,
-      [codigo, descricao, categoria || null, unidade || 'kg', estoque_minimo || null]
+      [codigo, descricao, categoria_id || null, unidade || 'kg', estoque_minimo || null]
     );
     res.json({ ok: true, produto: rows[0] });
   } catch(e){
@@ -44,12 +97,12 @@ app.post('/api/produtos', async (req, res) => {
 });
 
 app.put('/api/produtos/:id', async (req, res) => {
-  const { descricao, categoria, unidade, estoque_minimo } = req.body;
+  const { descricao, categoria_id, unidade, estoque_minimo } = req.body;
   try {
     const { rows } = await pool.query(
-      `UPDATE produtos SET descricao=$1, categoria=$2, unidade=$3, estoque_minimo=$4
+      `UPDATE produtos SET descricao=$1, categoria_id=$2, unidade=$3, estoque_minimo=$4
        WHERE id=$5 RETURNING *`,
-      [descricao, categoria, unidade, estoque_minimo, req.params.id]
+      [descricao, categoria_id || null, unidade, estoque_minimo, req.params.id]
     );
     res.json({ ok: true, produto: rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
@@ -60,6 +113,66 @@ app.delete('/api/produtos/:id', async (req, res) => {
     await pool.query(`UPDATE produtos SET ativo = FALSE WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
   } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// Importação em lote de produtos (planilha/CSV já parseado no frontend).
+// Cria categorias que ainda não existem, pula produtos com código já cadastrado.
+app.post('/api/produtos/importar', async (req, res) => {
+  const { produtos: lista } = req.body;
+  if(!Array.isArray(lista) || lista.length === 0){
+    return res.status(400).json({ error: 'Nenhum produto para importar' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let importados = 0, duplicados = 0, erros = 0;
+    const categoriaCache = {};
+
+    for(const item of lista){
+      try {
+        const codigo = (item.codigo || '').trim();
+        const descricao = (item.descricao || '').trim();
+        if(!codigo || !descricao){ erros++; continue; }
+
+        const existe = await client.query(`SELECT id FROM produtos WHERE codigo=$1`, [codigo]);
+        if(existe.rows.length > 0){ duplicados++; continue; }
+
+        let categoriaId = null;
+        const nomeCategoria = (item.categoria || '').trim();
+        if(nomeCategoria){
+          if(categoriaCache[nomeCategoria.toLowerCase()]){
+            categoriaId = categoriaCache[nomeCategoria.toLowerCase()];
+          } else {
+            const catRes = await client.query(
+              `INSERT INTO categorias (nome) VALUES ($1)
+               ON CONFLICT (nome) DO UPDATE SET nome=EXCLUDED.nome RETURNING id`,
+              [nomeCategoria]
+            );
+            categoriaId = catRes.rows[0].id;
+            categoriaCache[nomeCategoria.toLowerCase()] = categoriaId;
+          }
+        }
+
+        await client.query(
+          `INSERT INTO produtos (codigo, descricao, categoria_id, unidade, estoque_minimo, origem)
+           VALUES ($1,$2,$3,$4,$5,'importado')`,
+          [codigo, descricao, categoriaId, (item.unidade || 'kg').trim(), item.estoque_minimo || null]
+        );
+        importados++;
+      } catch(e){
+        console.error('Erro ao importar produto:', e.message);
+        erros++;
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, importados, duplicados, erros, total: lista.length });
+  } catch(e){
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -94,9 +207,10 @@ app.get('/api/codigos/:codigo', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT pc.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao,
-              p.categoria, p.unidade AS produto_unidade
+              c.nome AS categoria, p.unidade AS produto_unidade
        FROM produto_codigos pc
        JOIN produtos p ON p.id = pc.produto_id
+       LEFT JOIN categorias c ON c.id = p.categoria_id
        WHERE pc.codigo_barras = $1`,
       [req.params.codigo]
     );
@@ -157,9 +271,10 @@ app.get('/api/lotes', async (req, res) => {
   const { produto_id, status, disponivel } = req.query;
   try {
     let q = `SELECT l.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao,
-                    p.categoria, f.nome AS fornecedor_nome
+                    c.nome AS categoria, f.nome AS fornecedor_nome
              FROM lotes l
              JOIN produtos p ON p.id = l.produto_id
+             LEFT JOIN categorias c ON c.id = p.categoria_id
              LEFT JOIN fornecedores f ON f.id = l.fornecedor_id
              WHERE 1=1`;
     const vals = [];
@@ -177,8 +292,9 @@ app.get('/api/lotes', async (req, res) => {
 app.get('/api/lotes/by-codigo/:codigo_lote', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT l.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao, p.categoria
+      `SELECT l.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao, c.nome AS categoria
        FROM lotes l JOIN produtos p ON p.id = l.produto_id
+       LEFT JOIN categorias c ON c.id = p.categoria_id
        WHERE l.codigo_lote = $1`,
       [req.params.codigo_lote]
     );
@@ -381,18 +497,20 @@ app.get('/api/dashboard', async (req, res) => {
     }
 
     const valorPorCategoria = await pool.query(
-      `SELECT COALESCE(p.categoria,'Sem categoria') AS categoria,
+      `SELECT COALESCE(c.nome,'Sem categoria') AS categoria,
               SUM(l.quantidade_atual * COALESCE(l.preco_unitario,0)) AS valor,
               SUM(l.quantidade_atual) AS quantidade
        FROM lotes l JOIN produtos p ON p.id=l.produto_id
+       LEFT JOIN categorias c ON c.id = p.categoria_id
        WHERE l.quantidade_atual > 0
-       GROUP BY p.categoria ORDER BY valor DESC`
+       GROUP BY c.nome ORDER BY valor DESC`
     );
 
     const vencendo = await pool.query(
-      `SELECT l.*, p.descricao AS produto_descricao, p.categoria,
+      `SELECT l.*, p.descricao AS produto_descricao, c.nome AS categoria,
               (l.data_validade - CURRENT_DATE) AS dias_restantes
        FROM lotes l JOIN produtos p ON p.id=l.produto_id
+       LEFT JOIN categorias c ON c.id = p.categoria_id
        WHERE l.quantidade_atual > 0 AND l.data_validade IS NOT NULL
          AND l.data_validade <= CURRENT_DATE + ($1 || ' days')::interval
        ORDER BY l.data_validade ASC`,

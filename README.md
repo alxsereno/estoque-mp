@@ -26,6 +26,12 @@ embalagem recebida; a saída era feita lendo essa etiqueta.
   (ex: 10 pacotes × 5kg = 50kg entram no estoque).
 - Dashboard: valor de estoque por categoria, lotes próximos do vencimento,
   valor das baixas do dia.
+- **Categorias** agora são cadastradas em tela própria (Configurações →
+  Categorias), em vez de texto livre em cada produto — evita categorias
+  duplicadas escritas de formas diferentes.
+- **Importar produtos**: em Configurações há um importador de CSV para
+  subir sua lista de produtos já cadastrados (com categoria) direto pro
+  PostgreSQL, sem precisar cadastrar um por um.
 
 ---
 
