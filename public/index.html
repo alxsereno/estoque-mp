@@ -7,15 +7,21 @@
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;background:#f5f5f2;color:#1a1a18;font-size:14px}
-.app{display:flex;height:100vh}
-.sidebar{width:200px;min-width:200px;background:#fff;border-right:1px solid #e5e5e0;display:flex;flex-direction:column}
-.logo{padding:18px 16px 12px;font-size:13px;font-weight:600;border-bottom:1px solid #e5e5e0}
-.logo span{font-size:10px;font-weight:400;color:#888;display:block;margin-top:2px}
-nav{flex:1;padding:8px 0;overflow-y:auto}
-.nav-item{display:flex;align-items:center;gap:9px;padding:8px 16px;cursor:pointer;font-size:13px;color:#555;border-left:3px solid transparent;transition:all .15s}
+:root{--brand:#1e7e34;--brand-dark:#166b2b;--brand-soft:#e6f4ea;}
+body{font-family:system-ui,sans-serif;background:#faf9f6;color:#1a1a18;font-size:14px}
+.app{display:flex;flex-direction:column;height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:#fff;border-bottom:1px solid #e5e5e0;flex-shrink:0}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-icon{width:34px;height:34px;border-radius:9px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.topbar-title{font-size:14px;font-weight:700;line-height:1.3}
+.topbar-title span{display:block;font-size:11px;font-weight:400;color:#888;margin-top:1px}
+.app-body{display:flex;flex:1;min-height:0}
+.sidebar{width:210px;min-width:210px;background:#fff;border-right:1px solid #e5e5e0;display:flex;flex-direction:column}
+nav{flex:1;padding:12px 10px;overflow-y:auto}
+.nav-group-label{font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.06em;padding:10px 10px 6px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;cursor:pointer;font-size:13px;color:#555;border-radius:8px;transition:all .15s;margin-bottom:2px}
 .nav-item:hover{background:#f8f8f5;color:#1a1a18}
-.nav-item.active{background:#f0f0ea;color:#1a1a18;font-weight:500;border-left-color:#1a1a18}
+.nav-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
 .nav-icon{width:16px;text-align:center;font-size:13px;flex-shrink:0}
 .content{flex:1;overflow-y:auto;padding:28px 32px}
 .screen{display:none}.screen.active{display:block}
@@ -30,15 +36,17 @@ h1{font-size:20px;font-weight:600;margin-bottom:4px}
 .field{display:flex;flex-direction:column;gap:5px}
 label{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em}
 input,select,textarea{padding:9px 11px;border:1px solid #ddd;border-radius:7px;font-size:13px;color:#1a1a18;background:#fff;width:100%;transition:border .15s;font-family:inherit}
-input:focus,select:focus,textarea:focus{outline:none;border-color:#888}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand)}
 input[readonly]{background:#f8f8f5;color:#555}
 .btn{padding:9px 18px;font-size:13px;font-weight:500;border:1px solid #ddd;border-radius:7px;background:#fff;color:#1a1a18;cursor:pointer;transition:all .15s}
 .btn:hover{background:#f5f5f2}
-.btn-dark{background:#1a1a18;color:#fff;border-color:#1a1a18}
-.btn-dark:hover{opacity:.85}
+.btn-dark{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn-dark:hover{background:var(--brand-dark)}
 .btn-warn{background:#b8860b;color:#fff;border-color:#b8860b}
 .btn-danger{background:#c0392b;color:#fff;border-color:#c0392b}
-.btn-green{background:#1e7e34;color:#fff;border-color:#1e7e34}
+.btn-green{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn-icon{width:30px;height:30px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:14px;color:#999;border:1px solid #ddd;background:#fff}
+.btn-icon:hover{background:#fde8e8;color:#c0392b;border-color:#f3c6c1}
 .btn-sm{padding:5px 12px;font-size:12px}
 .btn-row{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
@@ -103,12 +111,28 @@ tr:hover td{background:#fafaf7}
   body{background:#fff;font-size:12px}
 }
 #print-area{display:none}
+.modal-overlay{position:fixed;inset:0;background:rgba(20,20,18,.45);display:flex;align-items:center;justify-content:center;z-index:2000}
+.modal-box{background:#fff;border-radius:12px;padding:24px;width:520px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.modal-header h2{font-size:16px;font-weight:600}
+.modal-close{cursor:pointer;color:#aaa;font-size:20px;line-height:1;background:none;border:none}
+.modal-close:hover{color:#1a1a18}
+.view-toggle{display:inline-flex;border:1px solid #ddd;border-radius:7px;overflow:hidden;margin-bottom:16px}
+.view-toggle button{padding:7px 14px;font-size:12px;border:none;background:#fff;cursor:pointer;color:#666}
+.view-toggle button.active{background:#1a1a18;color:#fff}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
 </style>
 </head>
 <body>
 <div class="app">
+<header class="topbar no-print">
+  <div class="topbar-left">
+    <div class="topbar-icon">📦</div>
+    <div class="topbar-title">Estoque MP<span>Simples e Natural</span></div>
+  </div>
+</header>
+<div class="app-body">
 <aside class="sidebar no-print">
-  <div class="logo">Estoque MP<span>Simples e Natural</span></div>
   <nav id="nav"></nav>
 </aside>
 <main class="content">
@@ -146,6 +170,9 @@ tr:hover td{background:#fafaf7}
         <label>Código de barras (ou digite manualmente)</label>
         <input type="text" id="ent-scan" placeholder="Escaneie ou digite o código..." autofocus>
       </div>
+      <div class="btn-row" style="justify-content:flex-start;margin-top:10px">
+        <button class="btn" onclick="abrirEntradaSemCodigo()">📋 Este produto não tem código de barras</button>
+      </div>
       <div id="ent-resultado" style="margin-top:14px"></div>
     </div>
 
@@ -159,7 +186,7 @@ tr:hover td{background:#fafaf7}
           <input type="number" id="ent-qtd-comprada" step="0.0001" placeholder="Ex: 10">
         </div>
         <div class="field"><label>Unidade de compra</label>
-          <input type="text" id="ent-unidade-compra" placeholder="Ex: pacote">
+          <select id="ent-unidade-compra"></select>
         </div>
         <div class="field"><label>Fator de conversão (1 unidade de compra = X <span id="ent-unidade-base">kg</span>)</label>
           <input type="number" id="ent-fator" step="0.0001" placeholder="Ex: 5">
@@ -243,15 +270,23 @@ tr:hover td{background:#fafaf7}
 
   <!-- ESTOQUE / LOTES -->
   <section class="screen" id="s-estoque">
-    <h1>Estoque (Lotes)</h1>
-    <p class="sub">Todos os lotes com saldo em estoque</p>
+    <h1>Estoque</h1>
+    <p class="sub">Saldo em estoque, por lote ou agrupado por produto</p>
+    <div class="view-toggle">
+      <button id="est-view-lote" class="active" onclick="mudarVisaoEstoque('lote')">Por lote</button>
+      <button id="est-view-produto" onclick="mudarVisaoEstoque('produto')">Agrupado por produto</button>
+    </div>
     <div class="filter-row">
       <input type="text" id="est-busca" placeholder="Buscar produto..." oninput="renderEstoque()">
       <select id="est-categoria" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
     </div>
-    <div class="card"><table>
-      <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. atual</th><th>Validade</th><th>Fornecedor</th><th>Etiqueta</th><th></th></tr></thead>
+    <div class="card" id="est-card-lote"><table>
+      <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. atual</th><th>Validade</th><th>Status</th><th>Fornecedor</th><th>Etiqueta</th><th></th></tr></thead>
       <tbody id="est-tbody"></tbody>
+    </table></div>
+    <div class="card" id="est-card-produto" style="display:none"><table>
+      <thead><tr><th>Produto</th><th>Categoria</th><th>Qtd. total</th><th>Nº de lotes</th><th>Status</th><th>Valor em estoque</th></tr></thead>
+      <tbody id="est-produto-tbody"></tbody>
     </table></div>
   </section>
 
@@ -260,17 +295,18 @@ tr:hover td{background:#fafaf7}
     <h1>Produtos</h1>
     <p class="sub">Cadastro interno de matérias-primas</p>
     <div class="card">
-      <div class="card-title" id="prod-form-titulo">Novo produto</div>
+      <div class="card-title">Novo produto</div>
       <div class="grid4">
         <div class="field"><label>Código interno*</label><input id="p-codigo" placeholder="Ex: 001"></div>
         <div class="field"><label>Descrição*</label><input id="p-descricao" placeholder="Ex: Feijão Carioca"></div>
         <div class="field"><label>Categoria</label>
           <select id="p-categoria"><option value="">Sem categoria</option></select>
         </div>
-        <div class="field"><label>Unidade base</label><input id="p-unidade" placeholder="Ex: kg" value="kg"></div>
+        <div class="field"><label>Unidade base</label>
+          <select id="p-unidade"></select>
+        </div>
       </div>
       <div class="btn-row">
-        <button class="btn" id="prod-cancelar-edicao" onclick="cancelarEdicaoProduto()" style="display:none">Cancelar edição</button>
         <button class="btn btn-dark" id="prod-salvar-btn" onclick="criarProduto()">Cadastrar produto</button>
       </div>
     </div>
@@ -287,7 +323,7 @@ tr:hover td{background:#fafaf7}
   <!-- CONFIGURAÇÕES -->
   <section class="screen" id="s-config">
     <h1>Configurações</h1>
-    <p class="sub">Categorias de produtos e importação de dados</p>
+    <p class="sub">Categorias, unidades, prazos de validade e importação de dados</p>
 
     <div class="card">
       <div class="card-title">Categorias</div>
@@ -300,6 +336,30 @@ tr:hover td{background:#fafaf7}
         <thead><tr><th>Categoria</th><th>Produtos vinculados</th><th></th></tr></thead>
         <tbody id="cat-tbody"></tbody>
       </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Unidades de medida</div>
+      <p style="color:#666;margin-bottom:14px;font-size:13px">Usadas nos campos de unidade de compra e unidade base dos produtos.</p>
+      <div class="grid3">
+        <div class="field"><label>Sigla</label><input id="un-sigla" placeholder="Ex: pct"></div>
+        <div class="field" style="grid-column:2/4"><label>Nome</label><input id="un-nome" placeholder="Ex: Pacote"></div>
+      </div>
+      <div class="btn-row" style="justify-content:flex-start"><button class="btn btn-dark" onclick="criarUnidade()">Adicionar unidade</button></div>
+      <table style="margin-top:16px">
+        <thead><tr><th>Sigla</th><th>Nome</th><th></th></tr></thead>
+        <tbody id="un-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Prazos de validade</div>
+      <p style="color:#666;margin-bottom:14px;font-size:13px">Define quando um lote aparece como "Atenção" ou "Crítico" no Estoque e no Dashboard.</p>
+      <div class="grid2">
+        <div class="field"><label>Dias antes de vencer para "Atenção"</label><input type="number" id="cfg-atencao" min="1"></div>
+        <div class="field"><label>Dias antes de vencer para "Crítico"</label><input type="number" id="cfg-critico" min="1"></div>
+      </div>
+      <div class="btn-row" style="justify-content:flex-start"><button class="btn btn-dark" onclick="salvarConfigValidade()">Salvar parâmetros</button></div>
     </div>
 
     <div class="card">
@@ -321,7 +381,7 @@ tr:hover td{background:#fafaf7}
   <section class="screen" id="s-fornecedores">
     <h1>Fornecedores</h1>
     <div class="card">
-      <div class="card-title" id="forn-form-titulo">Novo fornecedor</div>
+      <div class="card-title">Novo fornecedor</div>
       <div class="grid3">
         <div class="field"><label>Nome*</label><input id="f-nome"></div>
         <div class="field"><label>CNPJ</label><input id="f-cnpj"></div>
@@ -330,7 +390,6 @@ tr:hover td{background:#fafaf7}
         <div class="field"><label>Contato</label><input id="f-contato"></div>
       </div>
       <div class="btn-row">
-        <button class="btn" id="forn-cancelar-edicao" onclick="cancelarEdicaoFornecedor()" style="display:none">Cancelar edição</button>
         <button class="btn btn-dark" id="forn-salvar-btn" onclick="criarFornecedor()">Cadastrar fornecedor</button>
       </div>
     </div>
@@ -395,33 +454,39 @@ tr:hover td{background:#fafaf7}
 
 </main>
 </div>
+</div>
 
 <div class="toast" id="toast"></div>
 <div id="print-area"></div>
+<div id="modal-root"></div>
 
 <script>
 const API = '';
-let produtos = [], fornecedores = [], categorias = [], lotesCache = [], produtosCache = [];
+let produtos = [], fornecedores = [], categorias = [], unidades = [], lotesCache = [], produtosCache = [];
 let arquivoProdutosSelecionado = null;
 let entradaAtual = null; // dados temporários do fluxo de entrada
 let saidaAtual = null;   // dados temporários do fluxo de saída
 
 const SCREENS = [
-  {id:'dashboard', icon:'📊', label:'Dashboard'},
-  {id:'entrada', icon:'📥', label:'Entrada'},
-  {id:'saida', icon:'📤', label:'Saída'},
-  {id:'estoque', icon:'📦', label:'Estoque (Lotes)'},
-  {id:'inventario', icon:'🧮', label:'Inventário'},
-  {id:'produtos', icon:'🏷️', label:'Produtos'},
-  {id:'fornecedores', icon:'🚚', label:'Fornecedores'},
-  {id:'movimentacoes', icon:'📋', label:'Movimentações'},
-  {id:'ajustes', icon:'⚖️', label:'Ajustes'},
-  {id:'config', icon:'⚙️', label:'Configurações'},
+  {id:'dashboard', icon:'🏠', label:'Início', grupo:'Visão geral'},
+  {id:'produtos', icon:'⚖️', label:'Produtos', grupo:'Cadastros'},
+  {id:'fornecedores', icon:'🚚', label:'Fornecedores', grupo:'Cadastros'},
+  {id:'config', icon:'⚙️', label:'Configurações', grupo:'Cadastros'},
+  {id:'entrada', icon:'📥', label:'Entrada', grupo:'Operação'},
+  {id:'saida', icon:'📤', label:'Saída', grupo:'Operação'},
+  {id:'estoque', icon:'📦', label:'Estoque', grupo:'Operação'},
+  {id:'inventario', icon:'🧮', label:'Inventário', grupo:'Operação'},
+  {id:'movimentacoes', icon:'📋', label:'Movimentações', grupo:'Operação'},
+  {id:'ajustes', icon:'📝', label:'Ajustes', grupo:'Operação'},
 ];
 
 function initNav(){
   const nav = document.getElementById('nav');
-  nav.innerHTML = SCREENS.map(s => `<div class="nav-item" data-screen="${s.id}" onclick="showScreen('${s.id}')"><span class="nav-icon">${s.icon}</span>${s.label}</div>`).join('');
+  const grupos = [...new Set(SCREENS.map(s=>s.grupo))];
+  nav.innerHTML = grupos.map(g => `
+    <div class="nav-group-label">${g}</div>
+    ${SCREENS.filter(s=>s.grupo===g).map(s => `<div class="nav-item" data-screen="${s.id}" onclick="showScreen('${s.id}')"><span class="nav-icon">${s.icon}</span>${s.label}</div>`).join('')}
+  `).join('');
 }
 
 const CARREGADORES = {
@@ -445,9 +510,26 @@ function toast(msg){
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2800);
 }
+function abrirModal(titulo, innerHtml){
+  document.getElementById('modal-root').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this) fecharModal()">
+      <div class="modal-box">
+        <div class="modal-header"><h2>${titulo}</h2><button class="modal-close" onclick="fecharModal()">✕</button></div>
+        ${innerHtml}
+      </div>
+    </div>`;
+}
+function fecharModal(){ document.getElementById('modal-root').innerHTML = ''; }
 function fmtMoeda(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function fmtNum(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{maximumFractionDigits:4}); }
 function fmtData(v){ if(!v) return '—'; const d = new Date(v); if(isNaN(d)) return v; return d.toLocaleDateString('pt-BR',{timeZone:'UTC'}); }
+function catBadge(nome){
+  if(!nome) return '<span style="color:#aaa">—</span>';
+  let hash = 0;
+  for(let i=0;i<nome.length;i++) hash = nome.charCodeAt(i) + ((hash<<5)-hash);
+  const hue = Math.abs(hash) % 360;
+  return `<span class="badge" style="background:hsl(${hue},60%,93%);color:hsl(${hue},55%,32%)">${nome}</span>`;
+}
 
 async function api(path, opts){
   const r = await fetch(API + path, opts);
@@ -461,9 +543,11 @@ async function carregarBase(){
   produtos = await api('/api/produtos');
   fornecedores = await api('/api/fornecedores');
   categorias = await api('/api/categorias');
+  unidades = await api('/api/unidades');
   const selForn = document.getElementById('ent-fornecedor');
   selForn.innerHTML = '<option value="">Selecione...</option>' + fornecedores.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('');
   atualizarSelectsCategorias();
+  atualizarSelectUnidadeBase();
 }
 
 function atualizarSelectsCategorias(){
@@ -472,6 +556,11 @@ function atualizarSelectsCategorias(){
   if(selCriar) selCriar.innerHTML = opts;
   const selFiltro = document.getElementById('prod-filtro-categoria');
   if(selFiltro) selFiltro.innerHTML = '<option value="">Todas categorias</option>' + categorias.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
+}
+
+function atualizarSelectUnidadeBase(){
+  const sel = document.getElementById('p-unidade');
+  if(sel) sel.innerHTML = unidades.map(u=>`<option value="${u.sigla}">${u.sigla} — ${u.nome}</option>`).join('');
 }
 
 // ═══════════════════════ DASHBOARD ═══════════════════════
@@ -554,24 +643,53 @@ function confirmarAssociacaoProduto(codigo){
   abrirFormEntrada(produto, null, codigo);
 }
 
+function abrirEntradaSemCodigo(){
+  abrirModal('Produto sem código de barras', `
+    <div class="field">
+      <label>Selecione o produto</label>
+      <select id="modal-sem-codigo-produto"><option value="">Selecione...</option>${produtos.map(p=>`<option value="${p.id}">${p.codigo} — ${p.descricao}</option>`).join('')}</select>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="confirmarEntradaSemCodigo()">Continuar</button>
+    </div>
+  `);
+}
+function confirmarEntradaSemCodigo(){
+  const produtoId = document.getElementById('modal-sem-codigo-produto').value;
+  if(!produtoId){ toast('Selecione um produto'); return; }
+  const produto = produtos.find(p => p.id == produtoId);
+  fecharModal();
+  document.getElementById('ent-scan').value = '';
+  document.getElementById('ent-resultado').innerHTML = `<div class="badge badge-gray">Sem código de barras: ${produto.descricao} — será oferecida etiqueta de lote</div>`;
+  abrirFormEntrada(produto, null, null);
+}
+
+function preencherSelectUnidade(selectEl, valorAtual){
+  selectEl.innerHTML = '<option value="">Selecione...</option>' + unidades.map(u=>`<option value="${u.sigla}">${u.sigla} — ${u.nome}</option>`).join('');
+  if(valorAtual) selectEl.value = valorAtual;
+}
+
 function abrirFormEntrada(produto, codigoInfo, codigoBarras){
   entradaAtual = { produto, codigoInfo, codigoBarras, novoCodigoNecessario: !codigoInfo };
   document.getElementById('ent-form-card').style.display = 'block';
   document.getElementById('ent-produto-titulo').textContent = `2. Dados da entrada — ${produto.descricao}`;
   document.getElementById('ent-unidade-base').textContent = produto.unidade;
   document.getElementById('ent-unidade-base2').textContent = produto.unidade;
-  document.getElementById('ent-sem-codigo-aviso').style.display = codigoInfo ? 'none' : 'block';
+  // aviso de "código novo" só faz sentido quando de fato veio um código de barras escaneado
+  document.getElementById('ent-sem-codigo-aviso').style.display = (!codigoInfo && codigoBarras) ? 'block' : 'none';
 
+  const selUnidade = document.getElementById('ent-unidade-compra');
   if(codigoInfo){
     document.getElementById('ent-fornecedor').value = codigoInfo.fornecedor_id || '';
-    document.getElementById('ent-unidade-compra').value = codigoInfo.unidade_compra || '';
+    preencherSelectUnidade(selUnidade, codigoInfo.unidade_compra);
     document.getElementById('ent-fator').value = codigoInfo.fator_conversao || '';
-    document.getElementById('ent-unidade-compra').readOnly = true;
+    selUnidade.disabled = true;
     document.getElementById('ent-fator').readOnly = true;
   } else {
-    document.getElementById('ent-unidade-compra').value = '';
+    preencherSelectUnidade(selUnidade, '');
     document.getElementById('ent-fator').value = '';
-    document.getElementById('ent-unidade-compra').readOnly = false;
+    selUnidade.disabled = false;
     document.getElementById('ent-fator').readOnly = false;
   }
   calcularQtdTotal();
@@ -788,11 +906,32 @@ async function confirmarSaida(){
   }catch(e){ toast('Erro: '+e.message); }
 }
 
-// ═══════════════════════ ESTOQUE (LOTES) ═══════════════════════
+// ═══════════════════════ ESTOQUE ═══════════════════════
+let estoqueVisao = 'lote';
+let configValidade = { critico: 7, atencao: 30 };
+function statusValidade(dataValidade){
+  if(!dataValidade) return { label: 'Sem validade', cls: 'badge-gray', dot: '#aaa' };
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const val = new Date(dataValidade + 'T00:00:00');
+  const dias = Math.round((val - hoje) / 86400000);
+  if(dias < 0) return { label: 'Vencido', cls: 'badge-danger', dot: '#c0392b' };
+  if(dias <= configValidade.critico) return { label: 'Crítico', cls: 'badge-danger', dot: '#c0392b' };
+  if(dias <= configValidade.atencao) return { label: 'Atenção', cls: 'badge-warn', dot: '#b8860b' };
+  return { label: 'Ok', cls: 'badge-ok', dot: '#1e7e34' };
+}
 async function carregarEstoque(){
+  try{ const cfg = await api('/api/config'); if(cfg.validade) configValidade = cfg.validade; }catch{}
   lotesCache = await api('/api/lotes?disponivel=1');
   const cats = [...new Set(lotesCache.map(l=>l.categoria).filter(Boolean))];
   document.getElementById('est-categoria').innerHTML = '<option value="">Todas categorias</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  renderEstoque();
+}
+function mudarVisaoEstoque(v){
+  estoqueVisao = v;
+  document.getElementById('est-view-lote').classList.toggle('active', v==='lote');
+  document.getElementById('est-view-produto').classList.toggle('active', v==='produto');
+  document.getElementById('est-card-lote').style.display = v==='lote' ? 'block' : 'none';
+  document.getElementById('est-card-produto').style.display = v==='produto' ? 'block' : 'none';
   renderEstoque();
 }
 function renderEstoque(){
@@ -802,17 +941,45 @@ function renderEstoque(){
     (!busca || l.produto_descricao.toLowerCase().includes(busca)) &&
     (!cat || l.categoria === cat)
   );
-  document.getElementById('est-tbody').innerHTML = filtrado.map(l => `
-    <tr>
+
+  if(estoqueVisao === 'lote'){
+    document.getElementById('est-tbody').innerHTML = filtrado.map(l => {
+      const st = statusValidade(l.data_validade);
+      return `<tr>
       <td><span class="lote-tag">${l.codigo_lote}</span></td>
       <td>${l.produto_descricao}</td>
-      <td>${l.categoria||'—'}</td>
+      <td>${catBadge(l.categoria)}</td>
       <td>${fmtNum(l.quantidade_atual)} ${l.unidade}</td>
       <td>${fmtData(l.data_validade)}</td>
+      <td><span class="badge ${st.cls}"><span class="status-dot" style="background:${st.dot}"></span>${st.label}</span></td>
       <td>${l.fornecedor_nome||'—'}</td>
       <td>${l.possui_codigo_barras ? '<span class="badge badge-gray">Cód. fornecedor</span>' : (l.etiqueta_impressa ? '<span class="badge badge-ok">Impressa</span>' : '<span class="badge badge-warn">Pendente</span>')}</td>
       <td>${!l.possui_codigo_barras ? `<button class="btn btn-sm" onclick='reimprimirEtiqueta(${JSON.stringify(l).replace(/'/g,"&apos;")})'>🖨️</button>` : ''}</td>
-    </tr>`).join('') || '<tr><td colspan="8" style="color:#aaa;text-align:center;padding:24px">Nenhum lote encontrado</td></tr>';
+    </tr>`;
+    }).join('') || '<tr><td colspan="9" style="color:#aaa;text-align:center;padding:24px">Nenhum lote encontrado</td></tr>';
+  } else {
+    const grupos = {};
+    filtrado.forEach(l => {
+      const key = l.produto_id;
+      if(!grupos[key]) grupos[key] = { produto_descricao: l.produto_descricao, categoria: l.categoria, unidade: l.unidade, qtd: 0, nLotes: 0, valor: 0, piorStatus: null, piorRank: -1 };
+      const st = statusValidade(l.data_validade);
+      const rank = { 'Ok':0, 'Sem validade':0, 'Atenção':1, 'Crítico':2, 'Vencido':3 }[st.label];
+      grupos[key].qtd += parseFloat(l.quantidade_atual);
+      grupos[key].nLotes += 1;
+      grupos[key].valor += parseFloat(l.quantidade_atual) * (parseFloat(l.preco_unitario)||0);
+      if(rank > grupos[key].piorRank){ grupos[key].piorRank = rank; grupos[key].piorStatus = st; }
+    });
+    const linhas = Object.values(grupos);
+    document.getElementById('est-produto-tbody').innerHTML = linhas.map(g => `
+      <tr>
+        <td>${g.produto_descricao}</td>
+        <td>${catBadge(g.categoria)}</td>
+        <td>${fmtNum(g.qtd)} ${g.unidade}</td>
+        <td>${g.nLotes}</td>
+        <td><span class="badge ${g.piorStatus.cls}"><span class="status-dot" style="background:${g.piorStatus.dot}"></span>${g.piorStatus.label}</span></td>
+        <td>${fmtMoeda(g.valor)}</td>
+      </tr>`).join('') || '<tr><td colspan="6" style="color:#aaa;text-align:center;padding:24px">Nenhum produto em estoque</td></tr>';
+  }
 }
 async function reimprimirEtiqueta(lote){
   const area = document.getElementById('print-area');
@@ -828,10 +995,10 @@ async function reimprimirEtiqueta(lote){
 }
 
 // ═══════════════════════ PRODUTOS ═══════════════════════
-let editandoProdutoId = null;
 async function carregarProdutos(){
   produtos = await api('/api/produtos');
   atualizarSelectsCategorias();
+  atualizarSelectUnidadeBase();
   const tbody = document.getElementById('prod-tbody');
   tbody.innerHTML = '<tr><td colspan="6" style="color:#aaa">Carregando...</td></tr>';
   produtosCache = await Promise.all(produtos.map(async p => {
@@ -853,10 +1020,10 @@ function renderProdutos(){
       ? p.codigos.map(c=>`<span class="badge badge-gray" style="margin-right:4px">${c.codigo_barras||'(sem cód.)'} · ${c.descricao_embalagem||c.unidade_compra}</span>`).join('')
       : '<span style="color:#aaa">nenhum</span>';
     return `<tr>
-      <td>${p.codigo}</td><td>${p.descricao}</td><td>${p.categoria||'—'}</td><td>${p.unidade}</td><td>${codigosHtml}</td>
+      <td>${p.codigo}</td><td>${p.descricao}</td><td>${catBadge(p.categoria)}</td><td>${p.unidade}</td><td>${codigosHtml}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editarProduto(${p.id})">Editar</button>
-        <button class="btn btn-sm btn-danger" onclick="inativarProduto(${p.id},'${p.descricao.replace(/'/g,"\\'")}')">Inativar</button>
+        <button class="btn-icon" title="Inativar" onclick="inativarProduto(${p.id},'${p.descricao.replace(/'/g,"\\'")}')">⊘</button>
       </td>
     </tr>`;
   }).join('') || '<tr><td colspan="6" style="color:#aaa;text-align:center;padding:24px">Nenhum produto encontrado</td></tr>';
@@ -864,26 +1031,32 @@ function renderProdutos(){
 function editarProduto(id){
   const p = produtosCache.find(x => x.id === id);
   if(!p) return;
-  editandoProdutoId = id;
-  document.getElementById('p-codigo').value = p.codigo;
-  document.getElementById('p-codigo').disabled = true; // código não muda depois de criado
-  document.getElementById('p-descricao').value = p.descricao;
-  document.getElementById('p-categoria').value = p.categoria_id || '';
-  document.getElementById('p-unidade').value = p.unidade;
-  document.getElementById('prod-form-titulo').textContent = 'Editando: ' + p.descricao;
-  document.getElementById('prod-salvar-btn').textContent = 'Salvar alterações';
-  document.getElementById('prod-cancelar-edicao').style.display = 'inline-block';
-  window.scrollTo({top:0, behavior:'smooth'});
+  abrirModal('Editar produto', `
+    <div class="field" style="margin-bottom:12px"><label>Código interno</label><input value="${p.codigo}" disabled></div>
+    <div class="field" style="margin-bottom:12px"><label>Descrição*</label><input id="modal-p-descricao" value="${p.descricao.replace(/"/g,'&quot;')}"></div>
+    <div class="field" style="margin-bottom:12px"><label>Categoria</label>
+      <select id="modal-p-categoria"><option value="">Sem categoria</option>${categorias.map(c=>`<option value="${c.id}" ${c.id===p.categoria_id?'selected':''}>${c.nome}</option>`).join('')}</select>
+    </div>
+    <div class="field" style="margin-bottom:16px"><label>Unidade base</label>
+      <select id="modal-p-unidade">${unidades.map(u=>`<option value="${u.sigla}" ${u.sigla===p.unidade?'selected':''}>${u.sigla} — ${u.nome}</option>`).join('')}</select>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarEdicaoProduto(${p.id})">Salvar alterações</button>
+    </div>
+  `);
 }
-function cancelarEdicaoProduto(){
-  editandoProdutoId = null;
-  ['p-codigo','p-descricao'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('p-codigo').disabled = false;
-  document.getElementById('p-categoria').value='';
-  document.getElementById('p-unidade').value='kg';
-  document.getElementById('prod-form-titulo').textContent = 'Novo produto';
-  document.getElementById('prod-salvar-btn').textContent = 'Cadastrar produto';
-  document.getElementById('prod-cancelar-edicao').style.display = 'none';
+async function salvarEdicaoProduto(id){
+  const descricao = document.getElementById('modal-p-descricao').value.trim();
+  const categoria_id = document.getElementById('modal-p-categoria').value || null;
+  const unidade = document.getElementById('modal-p-unidade').value;
+  if(!descricao){ toast('Descrição é obrigatória'); return; }
+  try{
+    await api(`/api/produtos/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({descricao,categoria_id,unidade}) });
+    toast('✓ Produto atualizado');
+    fecharModal();
+    carregarProdutos();
+  }catch(e){ toast('Erro: '+e.message); }
 }
 async function inativarProduto(id, descricao){
   if(!confirm(`Inativar o produto "${descricao}"? Ele deixa de aparecer nas telas, mas o histórico é mantido.`)) return;
@@ -897,20 +1070,13 @@ async function criarProduto(){
   const codigo = document.getElementById('p-codigo').value.trim();
   const descricao = document.getElementById('p-descricao').value.trim();
   const categoria_id = document.getElementById('p-categoria').value || null;
-  const unidade = document.getElementById('p-unidade').value.trim() || 'kg';
+  const unidade = document.getElementById('p-unidade').value;
   if(!codigo || !descricao){ toast('Código e descrição são obrigatórios'); return; }
   try{
-    if(editandoProdutoId){
-      await api(`/api/produtos/${editandoProdutoId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({descricao,categoria_id,unidade}) });
-      toast('✓ Produto atualizado');
-      cancelarEdicaoProduto();
-    } else {
-      await api('/api/produtos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({codigo,descricao,categoria_id,unidade}) });
-      toast('✓ Produto criado');
-      ['p-codigo','p-descricao'].forEach(id=>document.getElementById(id).value='');
-      document.getElementById('p-categoria').value='';
-      document.getElementById('p-unidade').value='kg';
-    }
+    await api('/api/produtos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({codigo,descricao,categoria_id,unidade}) });
+    toast('✓ Produto criado');
+    ['p-codigo','p-descricao'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('p-categoria').value='';
     carregarProdutos();
   }catch(e){ toast('Erro: '+e.message); }
 }
@@ -925,6 +1091,49 @@ async function carregarConfig(){
       <td>${c.total_produtos}</td>
       <td><button class="btn btn-sm btn-danger" onclick="excluirCategoria(${c.id},'${c.nome.replace(/'/g,"\\'")}')">Excluir</button></td>
     </tr>`).join('') || '<tr><td colspan="3" style="color:#aaa;text-align:center;padding:24px">Nenhuma categoria cadastrada</td></tr>';
+
+  unidades = await api('/api/unidades');
+  atualizarSelectUnidadeBase();
+  document.getElementById('un-tbody').innerHTML = unidades.map(u => `
+    <tr>
+      <td>${u.sigla}</td><td>${u.nome}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="excluirUnidade(${u.id},'${u.sigla}')">Excluir</button></td>
+    </tr>`).join('') || '<tr><td colspan="3" style="color:#aaa;text-align:center;padding:24px">Nenhuma unidade cadastrada</td></tr>';
+
+  try{
+    const cfg = await api('/api/config');
+    const v = cfg.validade || { critico: 7, atencao: 30 };
+    document.getElementById('cfg-atencao').value = v.atencao;
+    document.getElementById('cfg-critico').value = v.critico;
+  }catch{}
+}
+async function criarUnidade(){
+  const sigla = document.getElementById('un-sigla').value.trim();
+  const nome = document.getElementById('un-nome').value.trim();
+  if(!sigla || !nome){ toast('Sigla e nome são obrigatórios'); return; }
+  try{
+    await api('/api/unidades', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({sigla,nome}) });
+    toast('✓ Unidade criada');
+    document.getElementById('un-sigla').value=''; document.getElementById('un-nome').value='';
+    carregarConfig();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function excluirUnidade(id, sigla){
+  if(!confirm(`Excluir a unidade "${sigla}"?`)) return;
+  try{
+    await api(`/api/unidades/${id}`, { method:'DELETE' });
+    toast('✓ Unidade excluída');
+    carregarConfig();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function salvarConfigValidade(){
+  const atencao = parseInt(document.getElementById('cfg-atencao').value);
+  const critico = parseInt(document.getElementById('cfg-critico').value);
+  if(!atencao || !critico){ toast('Preencha os dois prazos'); return; }
+  try{
+    await api('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chave:'validade', valor:{critico,atencao}}) });
+    toast('✓ Parâmetros de validade salvos');
+  }catch(e){ toast('Erro: '+e.message); }
 }
 async function criarCategoria(){
   const nome = document.getElementById('cat-nome').value.trim();
@@ -1026,7 +1235,6 @@ async function importarProdutos(){
 }
 
 // ═══════════════════════ FORNECEDORES ═══════════════════════
-let editandoFornecedorId = null;
 async function carregarFornecedores(){
   fornecedores = await api('/api/fornecedores');
   document.getElementById('forn-tbody').innerHTML = fornecedores.map(f => `
@@ -1034,7 +1242,7 @@ async function carregarFornecedores(){
       <td>${f.nome}</td><td>${f.cnpj||'—'}</td><td>${f.telefone||'—'}</td><td>${f.email||'—'}</td><td>${f.contato||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="editarFornecedor(${f.id})">Editar</button>
-        <button class="btn btn-sm btn-danger" onclick="inativarFornecedor(${f.id},'${f.nome.replace(/'/g,"\\'")}')">Inativar</button>
+        <button class="btn-icon" title="Inativar" onclick="inativarFornecedor(${f.id},'${f.nome.replace(/'/g,"\\'")}')">⊘</button>
       </td>
     </tr>
   `).join('') || '<tr><td colspan="6" style="color:#aaa;text-align:center;padding:24px">Nenhum fornecedor cadastrado</td></tr>';
@@ -1042,23 +1250,34 @@ async function carregarFornecedores(){
 function editarFornecedor(id){
   const f = fornecedores.find(x => x.id === id);
   if(!f) return;
-  editandoFornecedorId = id;
-  document.getElementById('f-nome').value = f.nome || '';
-  document.getElementById('f-cnpj').value = f.cnpj || '';
-  document.getElementById('f-telefone').value = f.telefone || '';
-  document.getElementById('f-email').value = f.email || '';
-  document.getElementById('f-contato').value = f.contato || '';
-  document.getElementById('forn-form-titulo').textContent = 'Editando: ' + f.nome;
-  document.getElementById('forn-salvar-btn').textContent = 'Salvar alterações';
-  document.getElementById('forn-cancelar-edicao').style.display = 'inline-block';
-  window.scrollTo({top:0, behavior:'smooth'});
+  abrirModal('Editar fornecedor', `
+    <div class="field" style="margin-bottom:12px"><label>Nome*</label><input id="modal-f-nome" value="${(f.nome||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field" style="margin-bottom:12px"><label>CNPJ</label><input id="modal-f-cnpj" value="${(f.cnpj||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field" style="margin-bottom:12px"><label>Telefone</label><input id="modal-f-telefone" value="${(f.telefone||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field" style="margin-bottom:12px"><label>Email</label><input id="modal-f-email" value="${(f.email||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field" style="margin-bottom:16px"><label>Contato</label><input id="modal-f-contato" value="${(f.contato||'').replace(/"/g,'&quot;')}"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarEdicaoFornecedor(${f.id})">Salvar alterações</button>
+    </div>
+  `);
 }
-function cancelarEdicaoFornecedor(){
-  editandoFornecedorId = null;
-  ['f-nome','f-cnpj','f-telefone','f-email','f-contato'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('forn-form-titulo').textContent = 'Novo fornecedor';
-  document.getElementById('forn-salvar-btn').textContent = 'Cadastrar fornecedor';
-  document.getElementById('forn-cancelar-edicao').style.display = 'none';
+async function salvarEdicaoFornecedor(id){
+  const nome = document.getElementById('modal-f-nome').value.trim();
+  if(!nome){ toast('Nome é obrigatório'); return; }
+  const body = {
+    nome,
+    cnpj: document.getElementById('modal-f-cnpj').value.trim(),
+    telefone: document.getElementById('modal-f-telefone').value.trim(),
+    email: document.getElementById('modal-f-email').value.trim(),
+    contato: document.getElementById('modal-f-contato').value.trim()
+  };
+  try{
+    await api(`/api/fornecedores/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    toast('✓ Fornecedor atualizado');
+    fecharModal();
+    carregarFornecedores();
+  }catch(e){ toast('Erro: '+e.message); }
 }
 async function inativarFornecedor(id, nome){
   if(!confirm(`Inativar o fornecedor "${nome}"?`)) return;
@@ -1079,15 +1298,9 @@ async function criarFornecedor(){
     contato: document.getElementById('f-contato').value.trim()
   };
   try{
-    if(editandoFornecedorId){
-      await api(`/api/fornecedores/${editandoFornecedorId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-      toast('✓ Fornecedor atualizado');
-      cancelarEdicaoFornecedor();
-    } else {
-      await api('/api/fornecedores', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-      toast('✓ Fornecedor criado');
-      ['f-nome','f-cnpj','f-telefone','f-email','f-contato'].forEach(id=>document.getElementById(id).value='');
-    }
+    await api('/api/fornecedores', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    toast('✓ Fornecedor criado');
+    ['f-nome','f-cnpj','f-telefone','f-email','f-contato'].forEach(id=>document.getElementById(id).value='');
     carregarFornecedores();
   }catch(e){ toast('Erro: '+e.message); }
 }
@@ -1117,7 +1330,7 @@ async function carregarMovimentacoes(){
       <td><span class="badge ${m.tipo==='entrada'?'badge-ok':(m.tipo==='saida'?'badge-info':'badge-warn')}">${m.tipo}</span></td>
       <td>${m.produto_codigo||'—'}</td>
       <td>${m.produto||'—'}</td>
-      <td>${m.categoria||'—'}</td>
+      <td>${catBadge(m.categoria)}</td>
       <td>${m.codigo_lote?`<span class="lote-tag">${m.codigo_lote}</span>`:'—'}</td>
       <td>${fmtNum(m.quantidade)} ${m.unidade||''}</td>
       <td>${m.valor_total?fmtMoeda(m.valor_total):'—'}</td>
@@ -1167,7 +1380,7 @@ function renderInventario(){
     <tr data-lote-id="${l.id}" data-qtd-sistema="${l.quantidade_atual}">
       <td><span class="lote-tag">${l.codigo_lote}</span></td>
       <td>${l.produto_descricao}</td>
-      <td>${l.categoria||'—'}</td>
+      <td>${catBadge(l.categoria)}</td>
       <td>${fmtNum(l.quantidade_atual)} ${l.unidade}</td>
       <td><input type="number" step="0.0001" class="ajuste-input inv-contado" placeholder="${fmtNum(l.quantidade_atual)}" oninput="atualizarDiffInventario(this)"></td>
       <td class="inv-diff diff-zero">—</td>

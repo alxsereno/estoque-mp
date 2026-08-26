@@ -571,6 +571,38 @@ app.get('/api/dashboard', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// UNIDADES DE MEDIDA
+// ═══════════════════════════════════════════════════════════
+app.get('/api/unidades', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM unidades ORDER BY nome`);
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/unidades', async (req, res) => {
+  const { sigla, nome } = req.body;
+  if(!sigla || !nome) return res.status(400).json({ error: 'Sigla e nome são obrigatórios' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO unidades (sigla, nome) VALUES ($1,$2) RETURNING *`,
+      [sigla.trim().toLowerCase(), nome.trim()]
+    );
+    res.json({ ok: true, unidade: rows[0] });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Essa sigla já existe' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/unidades/:id', async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM unidades WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
 // CONFIGURAÇÕES
 // ═══════════════════════════════════════════════════════════
 app.get('/api/config', async (req, res) => {

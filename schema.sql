@@ -146,6 +146,21 @@ ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS configuracoes (chave VARCHAR(50) PRIMARY KEY, valor TEXT);
 
+-- Unidades de medida cadastráveis (usadas nos selects de unidade de compra)
+CREATE TABLE IF NOT EXISTS unidades (id SERIAL PRIMARY KEY);
+ALTER TABLE unidades ADD COLUMN IF NOT EXISTS sigla VARCHAR(10);
+ALTER TABLE unidades ADD COLUMN IF NOT EXISTS nome VARCHAR(50);
+ALTER TABLE unidades ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unidades_sigla_key') THEN
+    ALTER TABLE unidades ADD CONSTRAINT unidades_sigla_key UNIQUE (sigla);
+  END IF;
+END $$;
+INSERT INTO unidades (sigla, nome) VALUES
+  ('kg','Quilograma'), ('g','Grama'), ('l','Litro'), ('ml','Mililitro'),
+  ('un','Unidade'), ('pct','Pacote'), ('cx','Caixa'), ('sc','Saco'), ('dz','Dúzia')
+ON CONFLICT (sigla) DO NOTHING;
+
 -- ═══════════════════════════════════════════════════════════
 -- CORREÇÃO DE TIPOS HERDADOS DA v1: nas tabelas lotes/movimentacoes,
 -- algumas colunas já existiam (criadas pela v1) com tipo TEXTO em vez
