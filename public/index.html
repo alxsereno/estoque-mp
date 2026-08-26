@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estoque MP</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f5f2;color:#1a1a18;font-size:14px}
+.app{display:flex;height:100vh}
+.sidebar{width:200px;min-width:200px;background:#fff;border-right:1px solid #e5e5e0;display:flex;flex-direction:column}
+.logo{padding:18px 16px 12px;font-size:13px;font-weight:600;border-bottom:1px solid #e5e5e0}
+.logo span{font-size:10px;font-weight:400;color:#888;display:block;margin-top:2px}
+nav{flex:1;padding:8px 0;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 16px;cursor:pointer;font-size:13px;color:#555;border-left:3px solid transparent;transition:all .15s}
+.nav-item:hover{background:#f8f8f5;color:#1a1a18}
+.nav-item.active{background:#f0f0ea;color:#1a1a18;font-weight:500;border-left-color:#1a1a18}
+.nav-icon{width:16px;text-align:center;font-size:13px;flex-shrink:0}
+.content{flex:1;overflow-y:auto;padding:28px 32px}
+.screen{display:none}.screen.active{display:block}
+h1{font-size:20px;font-weight:600;margin-bottom:4px}
+.sub{color:#888;font-size:13px;margin-bottom:24px}
+.card{background:#fff;border:1px solid #e5e5e0;border-radius:10px;padding:22px;margin-bottom:16px}
+.card-title{font-size:13px;font-weight:600;margin-bottom:16px;color:#333}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.full{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:5px}
+label{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em}
+input,select,textarea{padding:9px 11px;border:1px solid #ddd;border-radius:7px;font-size:13px;color:#1a1a18;background:#fff;width:100%;transition:border .15s;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#888}
+input[readonly]{background:#f8f8f5;color:#555}
+.btn{padding:9px 18px;font-size:13px;font-weight:500;border:1px solid #ddd;border-radius:7px;background:#fff;color:#1a1a18;cursor:pointer;transition:all .15s}
+.btn:hover{background:#f5f5f2}
+.btn-dark{background:#1a1a18;color:#fff;border-color:#1a1a18}
+.btn-dark:hover{opacity:.85}
+.btn-warn{background:#b8860b;color:#fff;border-color:#b8860b}
+.btn-danger{background:#c0392b;color:#fff;border-color:#c0392b}
+.btn-green{background:#1e7e34;color:#fff;border-color:#1e7e34}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn-row{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-ok{background:#e6f4ea;color:#1e7e34}
+.badge-warn{background:#fff8e1;color:#b8860b}
+.badge-danger{background:#fde8e8;color:#c0392b}
+.badge-info{background:#e8f0fe;color:#1a56db}
+.badge-gray{background:#f0f0ea;color:#555}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;font-weight:600;color:#888;padding:0 12px 10px;border-bottom:1px solid #e5e5e0;text-transform:uppercase;letter-spacing:.04em}
+td{padding:10px 12px;border-bottom:1px solid #f0f0ea;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafaf7}
+.lote-tag{background:#e8f0fe;color:#1a56db;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;display:inline-block;font-family:monospace}
+.search-wrap{position:relative}
+.search-wrap input{padding-left:34px}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#aaa;font-size:14px;pointer-events:none}
+.autocomplete{position:fixed;background:#fff;border:1px solid #ddd;border-radius:8px;max-height:240px;overflow-y:auto;z-index:9999;display:none;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:280px}
+.ac-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid #f0f0ea;font-size:13px}
+.ac-item:hover{background:#f8f8f5}
+.ac-item:last-child{border-bottom:none}
+.ac-cod{font-size:11px;color:#aaa;margin-left:6px}
+.info-box{background:#e8f4fd;border-radius:8px;padding:12px 16px;font-size:12px;color:#1a56db;margin-bottom:16px;line-height:1.6}
+.warn-box{background:#fff8e1;border-radius:8px;padding:12px 16px;font-size:12px;color:#b8860b;margin-bottom:0;line-height:1.6}
+.metric{background:#f8f8f5;border-radius:8px;padding:16px}
+.metric-lbl{font-size:11px;color:#888;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.metric-val{font-size:26px;font-weight:600}
+.metric-sub{font-size:11px;color:#aaa;margin-top:3px}
+.cat-row{display:flex;align-items:center;padding:9px 0;border-bottom:1px solid #f0f0ea;font-size:12px}
+.cat-row:last-child{border-bottom:none}
+.cat-name{width:160px;color:#333}
+.cat-bar-wrap{flex:1;background:#ececea;border-radius:4px;height:7px;overflow:hidden;margin:0 10px}
+.cat-bar{height:100%;background:#1a1a18;border-radius:4px}
+.cat-val{min-width:80px;text-align:right;color:#888}
+.alert-box{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;margin-bottom:8px;font-size:12px}
+.alert-danger{background:#fde8e8}.alert-warn{background:#fff8e1}
+.alert-dot{width:7px;height:7px;border-radius:50%;margin-top:3px;flex-shrink:0}
+.dot-danger{background:#c0392b}.dot-warn{background:#b8860b}
+.filter-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filter-row input,.filter-row select{max-width:200px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+.step-indicator{display:flex;align-items:center;gap:0;margin-bottom:20px}
+.step{display:flex;align-items:center;gap:8px;font-size:12px;color:#aaa}
+.step.active{color:#1a1a18;font-weight:600}
+.step.done{color:#1e7e34}
+.step-num{width:22px;height:22px;border-radius:50%;border:1.5px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.step.active .step-num{border-color:#1a1a18;background:#1a1a18;color:#fff}
+.step.done .step-num{border-color:#1e7e34;background:#1e7e34;color:#fff}
+.step-line{flex:1;height:1px;background:#e5e5e0;margin:0 8px;min-width:16px}
+.lote-pick{border:1px solid #ddd;border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:all .15s}
+.lote-pick:hover{border-color:#888}
+.lote-pick.selected{border-color:#1a1a18;background:#f8f8f5}
+.lote-pick.recomendado{border-color:#1e7e34}
+@media print{
+  .app{display:block}
+  .sidebar{display:none}
+  .content{padding:0;overflow:visible}
+  .screen{display:none!important}
+  #print-area{display:block!important}
+  .no-print{display:none!important}
+  body{background:#fff;font-size:12px}
+}
+#print-area{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar no-print">
+  <div class="logo">Estoque MP<span>Simples e Natural</span></div>
+  <nav id="nav"></nav>
+</aside>
+<main class="content">
+
+  <!-- DASHBOARD -->
+  <section class="screen" id="s-dashboard">
+    <h1>Dashboard</h1>
+    <p class="sub">Visão geral do estoque de matéria-prima</p>
+    <div class="grid4" style="margin-bottom:16px">
+      <div class="metric"><div class="metric-lbl">Valor total em estoque</div><div class="metric-val" id="d-valor-total">—</div></div>
+      <div class="metric"><div class="metric-lbl">Baixas hoje (valor)</div><div class="metric-val" id="d-baixas-valor">—</div><div class="metric-sub" id="d-baixas-sub"></div></div>
+      <div class="metric"><div class="metric-lbl">Lotes vencendo</div><div class="metric-val" id="d-vencendo-count">—</div></div>
+      <div class="metric"><div class="metric-lbl">Produtos cadastrados</div><div class="metric-val" id="d-produtos-count">—</div></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Valor de estoque por categoria</div>
+        <div id="d-categorias"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Lotes próximos do vencimento</div>
+        <div id="d-vencendo"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ENTRADA -->
+  <section class="screen" id="s-entrada">
+    <h1>Entrada de Matéria-Prima</h1>
+    <p class="sub">Escaneie o código de barras do fornecedor na embalagem recebida</p>
+
+    <div class="card">
+      <div class="card-title">1. Identificar produto</div>
+      <div class="field">
+        <label>Código de barras (ou digite manualmente)</label>
+        <input type="text" id="ent-scan" placeholder="Escaneie ou digite o código..." autofocus>
+      </div>
+      <div id="ent-resultado" style="margin-top:14px"></div>
+    </div>
+
+    <div class="card" id="ent-form-card" style="display:none">
+      <div class="card-title" id="ent-produto-titulo">2. Dados da entrada</div>
+      <div class="grid3">
+        <div class="field"><label>Fornecedor</label>
+          <select id="ent-fornecedor"><option value="">Selecione...</option></select>
+        </div>
+        <div class="field"><label>Quantidade comprada</label>
+          <input type="number" id="ent-qtd-comprada" step="0.0001" placeholder="Ex: 10">
+        </div>
+        <div class="field"><label>Unidade de compra</label>
+          <input type="text" id="ent-unidade-compra" placeholder="Ex: pacote">
+        </div>
+        <div class="field"><label>Fator de conversão (1 unidade de compra = X <span id="ent-unidade-base">kg</span>)</label>
+          <input type="number" id="ent-fator" step="0.0001" placeholder="Ex: 5">
+        </div>
+        <div class="field"><label>Quantidade total (calculado)</label>
+          <input type="text" id="ent-qtd-total" readonly>
+        </div>
+        <div class="field"><label>Data de validade</label>
+          <input type="date" id="ent-validade">
+        </div>
+        <div class="field"><label>Preço por unidade (<span id="ent-unidade-base2">kg</span>)</label>
+          <input type="number" id="ent-preco" step="0.0001" placeholder="Ex: 8.90">
+        </div>
+        <div class="field"><label>Número da NF</label>
+          <input type="text" id="ent-nf">
+        </div>
+        <div class="field"><label>Total da NF (opcional)</label>
+          <input type="number" id="ent-total-nf" step="0.01">
+        </div>
+      </div>
+      <div class="warn-box full" style="margin-top:14px" id="ent-sem-codigo-aviso">
+        Este código não estava associado a nenhum produto ainda. Ao salvar, ele será
+        <strong>gravado permanentemente</strong> para este produto — nas próximas entradas o sistema já vai reconhecer automaticamente.
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="cancelarEntrada()">Cancelar</button>
+        <button class="btn btn-dark" onclick="confirmarEntrada()">Registrar entrada</button>
+      </div>
+    </div>
+
+    <div class="card" id="ent-etiqueta-card" style="display:none">
+      <div class="card-title">Este produto não tem código de barras de fábrica</div>
+      <p style="color:#666;margin-bottom:14px;font-size:13px">
+        Como não há código de barras na embalagem, gere uma etiqueta com o código do lote para colar no produto — assim ele poderá ser lido na hora da saída.
+      </p>
+      <div class="btn-row" style="justify-content:flex-start">
+        <button class="btn btn-dark" onclick="imprimirEtiquetaLote()">🖨️ Gerar etiqueta do lote</button>
+        <button class="btn" onclick="fecharEtiquetaCard()">Pular por agora</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SAÍDA -->
+  <section class="screen" id="s-saida">
+    <h1>Saída de Matéria-Prima</h1>
+    <p class="sub">Escaneie o código de barras (ou etiqueta do lote) para dar baixa no estoque</p>
+
+    <div class="card">
+      <div class="card-title">1. Identificar produto / lote</div>
+      <div class="field">
+        <label>Código de barras</label>
+        <input type="text" id="sai-scan" placeholder="Escaneie ou digite o código..." autofocus>
+      </div>
+      <div id="sai-resultado" style="margin-top:14px"></div>
+    </div>
+
+    <div class="card" id="sai-lotes-card" style="display:none">
+      <div class="card-title">2. Escolha o lote (sugerido: o que entrou primeiro)</div>
+      <div id="sai-lotes-lista"></div>
+    </div>
+
+    <div class="card" id="sai-form-card" style="display:none">
+      <div class="card-title">3. Quantidade da saída</div>
+      <div class="grid3">
+        <div class="field"><label>Quantidade disponível</label>
+          <input type="text" id="sai-qtd-disponivel" readonly>
+        </div>
+        <div class="field"><label>Quantidade de saída</label>
+          <input type="number" id="sai-qtd" step="0.0001">
+        </div>
+        <div class="field"><label>Destino</label>
+          <input type="text" id="sai-destino" placeholder="Ex: Cozinha - Marmita A">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="cancelarSaida()">Cancelar</button>
+        <button class="btn btn-dark" onclick="confirmarSaida()">Confirmar saída</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ESTOQUE / LOTES -->
+  <section class="screen" id="s-estoque">
+    <h1>Estoque (Lotes)</h1>
+    <p class="sub">Todos os lotes com saldo em estoque</p>
+    <div class="filter-row">
+      <input type="text" id="est-busca" placeholder="Buscar produto..." oninput="renderEstoque()">
+      <select id="est-categoria" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
+    </div>
+    <div class="card"><table>
+      <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. atual</th><th>Validade</th><th>Fornecedor</th><th>Etiqueta</th><th></th></tr></thead>
+      <tbody id="est-tbody"></tbody>
+    </table></div>
+  </section>
+
+  <!-- PRODUTOS -->
+  <section class="screen" id="s-produtos">
+    <h1>Produtos</h1>
+    <p class="sub">Cadastro interno de matérias-primas</p>
+    <div class="card">
+      <div class="card-title">Novo produto</div>
+      <div class="grid4">
+        <div class="field"><label>Código interno*</label><input id="p-codigo" placeholder="Ex: 001"></div>
+        <div class="field"><label>Descrição*</label><input id="p-descricao" placeholder="Ex: Feijão Carioca"></div>
+        <div class="field"><label>Categoria</label><input id="p-categoria" placeholder="Ex: Grãos"></div>
+        <div class="field"><label>Unidade base</label><input id="p-unidade" placeholder="Ex: kg" value="kg"></div>
+      </div>
+      <div class="btn-row"><button class="btn btn-dark" onclick="criarProduto()">Cadastrar produto</button></div>
+    </div>
+    <div class="card"><table>
+      <thead><tr><th>Código</th><th>Descrição</th><th>Categoria</th><th>Unidade</th><th>Códigos de barras associados</th></tr></thead>
+      <tbody id="prod-tbody"></tbody>
+    </table></div>
+  </section>
+
+  <!-- FORNECEDORES -->
+  <section class="screen" id="s-fornecedores">
+    <h1>Fornecedores</h1>
+    <div class="card">
+      <div class="card-title">Novo fornecedor</div>
+      <div class="grid3">
+        <div class="field"><label>Nome*</label><input id="f-nome"></div>
+        <div class="field"><label>CNPJ</label><input id="f-cnpj"></div>
+        <div class="field"><label>Telefone</label><input id="f-telefone"></div>
+        <div class="field"><label>Email</label><input id="f-email"></div>
+        <div class="field"><label>Contato</label><input id="f-contato"></div>
+      </div>
+      <div class="btn-row"><button class="btn btn-dark" onclick="criarFornecedor()">Cadastrar fornecedor</button></div>
+    </div>
+    <div class="card"><table>
+      <thead><tr><th>Nome</th><th>CNPJ</th><th>Telefone</th><th>Email</th><th>Contato</th></tr></thead>
+      <tbody id="forn-tbody"></tbody>
+    </table></div>
+  </section>
+
+  <!-- MOVIMENTAÇÕES -->
+  <section class="screen" id="s-movimentacoes">
+    <h1>Movimentações</h1>
+    <p class="sub">Histórico de entradas, saídas e devoluções</p>
+    <div class="card"><table>
+      <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Lote</th><th>Qtd</th><th>Valor</th><th>Destino / Obs</th></tr></thead>
+      <tbody id="mov-tbody"></tbody>
+    </table></div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section class="screen" id="s-ajustes">
+    <h1>Ajustes de Estoque</h1>
+    <p class="sub">Correções manuais de saldo (perdas, contagem física, etc.)</p>
+    <div class="card"><table>
+      <thead><tr><th>Data</th><th>Lote</th><th>Produto</th><th>Antes</th><th>Depois</th><th>Diferença</th><th>Motivo</th></tr></thead>
+      <tbody id="aj-tbody"></tbody>
+    </table></div>
+  </section>
+
+</main>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="print-area"></div>
+
+<script>
+const API = '';
+let produtos = [], fornecedores = [], lotesCache = [];
+let entradaAtual = null; // dados temporários do fluxo de entrada
+let saidaAtual = null;   // dados temporários do fluxo de saída
+
+const SCREENS = [
+  {id:'dashboard', icon:'📊', label:'Dashboard'},
+  {id:'entrada', icon:'📥', label:'Entrada'},
+  {id:'saida', icon:'📤', label:'Saída'},
+  {id:'estoque', icon:'📦', label:'Estoque (Lotes)'},
+  {id:'produtos', icon:'🏷️', label:'Produtos'},
+  {id:'fornecedores', icon:'🚚', label:'Fornecedores'},
+  {id:'movimentacoes', icon:'📋', label:'Movimentações'},
+  {id:'ajustes', icon:'⚖️', label:'Ajustes'},
+];
+
+function initNav(){
+  const nav = document.getElementById('nav');
+  nav.innerHTML = SCREENS.map(s => `<div class="nav-item" data-screen="${s.id}" onclick="showScreen('${s.id}')"><span class="nav-icon">${s.icon}</span>${s.label}</div>`).join('');
+}
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('s-'+id).classList.add('active');
+  document.querySelector(`.nav-item[data-screen="${id}"]`).classList.add('active');
+  if(id === 'dashboard') carregarDashboard();
+  if(id === 'estoque') carregarEstoque();
+  if(id === 'produtos') carregarProdutos();
+  if(id === 'fornecedores') carregarFornecedores();
+  if(id === 'movimentacoes') carregarMovimentacoes();
+  if(id === 'ajustes') carregarAjustes();
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+function fmtMoeda(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function fmtNum(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{maximumFractionDigits:4}); }
+function fmtData(v){ if(!v) return '—'; const d = new Date(v); if(isNaN(d)) return v; return d.toLocaleDateString('pt-BR',{timeZone:'UTC'}); }
+
+async function api(path, opts){
+  const r = await fetch(API + path, opts);
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(data.error || 'Erro na requisição');
+  return data;
+}
+
+// ═══════════════════════ DADOS BASE ═══════════════════════
+async function carregarBase(){
+  produtos = await api('/api/produtos');
+  fornecedores = await api('/api/fornecedores');
+  const selForn = document.getElementById('ent-fornecedor');
+  selForn.innerHTML = '<option value="">Selecione...</option>' + fornecedores.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('');
+}
+
+// ═══════════════════════ DASHBOARD ═══════════════════════
+async function carregarDashboard(){
+  try{
+    const d = await api('/api/dashboard');
+    document.getElementById('d-valor-total').textContent = fmtMoeda(d.valor_total_estoque);
+    document.getElementById('d-baixas-valor').textContent = fmtMoeda(d.baixas_hoje.valor_total);
+    document.getElementById('d-baixas-sub').textContent = `${d.baixas_hoje.total_movimentacoes} saída(s) hoje`;
+    document.getElementById('d-vencendo-count').textContent = d.lotes_vencendo.length;
+    document.getElementById('d-produtos-count').textContent = produtos.length;
+
+    const maxValor = Math.max(1, ...d.valor_por_categoria.map(c=>parseFloat(c.valor)));
+    document.getElementById('d-categorias').innerHTML = d.valor_por_categoria.length
+      ? d.valor_por_categoria.map(c => `
+        <div class="cat-row">
+          <div class="cat-name">${c.categoria}</div>
+          <div class="cat-bar-wrap"><div class="cat-bar" style="width:${(parseFloat(c.valor)/maxValor*100).toFixed(0)}%"></div></div>
+          <div class="cat-val">${fmtMoeda(c.valor)}</div>
+        </div>`).join('')
+      : '<p style="color:#aaa;font-size:12px">Sem dados de estoque ainda</p>';
+
+    document.getElementById('d-vencendo').innerHTML = d.lotes_vencendo.length
+      ? d.lotes_vencendo.map(l => `
+        <div class="alert-box ${l.criticidade==='critico'?'alert-danger':'alert-warn'}">
+          <div class="alert-dot ${l.criticidade==='critico'?'dot-danger':'dot-warn'}"></div>
+          <div>
+            <strong>${l.produto_descricao}</strong> — lote <span class="lote-tag">${l.codigo_lote}</span><br>
+            <span style="color:#888">Vence em ${fmtData(l.data_validade)} (${l.dias_restantes} dias) · ${fmtNum(l.quantidade_atual)} ${l.unidade}</span>
+          </div>
+        </div>`).join('')
+      : '<p style="color:#aaa;font-size:12px">Nenhum lote vencendo nos próximos dias</p>';
+  }catch(e){ toast('Erro ao carregar dashboard: '+e.message); }
+}
+
+// ═══════════════════════ ENTRADA ═══════════════════════
+document.addEventListener('keydown', e => {}); // placeholder, listeners set below
+
+function setupEntradaScan(){
+  const inp = document.getElementById('ent-scan');
+  inp.addEventListener('keydown', async e => {
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      await buscarCodigoEntrada(inp.value.trim());
+    }
+  });
+}
+
+async function buscarCodigoEntrada(codigo){
+  if(!codigo) return;
+  const resDiv = document.getElementById('ent-resultado');
+  resDiv.innerHTML = '<p style="color:#888;font-size:13px">Buscando...</p>';
+  try{
+    const r = await fetch(`/api/codigos/${encodeURIComponent(codigo)}`);
+    const data = await r.json();
+    if(r.ok && data.encontrado){
+      // produto já conhecido
+      const produto = produtos.find(p => p.id === data.produto_id) || {id:data.produto_id, codigo:data.produto_codigo, descricao:data.produto_descricao, categoria:data.categoria, unidade:data.produto_unidade};
+      abrirFormEntrada(produto, data, codigo);
+      resDiv.innerHTML = `<div class="badge badge-ok">✓ Código reconhecido: ${produto.descricao} (${data.descricao_embalagem||data.unidade_compra})</div>`;
+    } else {
+      resDiv.innerHTML = `
+        <div class="warn-box">Código <strong>${codigo}</strong> não associado a nenhum produto ainda.</div>
+        <div class="field" style="margin-top:10px">
+          <label>Selecione o produto correspondente</label>
+          <select id="ent-select-produto"><option value="">Selecione...</option>${produtos.map(p=>`<option value="${p.id}">${p.codigo} — ${p.descricao}</option>`).join('')}</select>
+        </div>
+        <div class="btn-row" style="justify-content:flex-start">
+          <button class="btn btn-sm btn-dark" onclick="confirmarAssociacaoProduto('${codigo}')">Associar e continuar</button>
+        </div>`;
+    }
+  }catch(e){ resDiv.innerHTML = `<p style="color:#c0392b">Erro: ${e.message}</p>`; }
+}
+
+function confirmarAssociacaoProduto(codigo){
+  const sel = document.getElementById('ent-select-produto');
+  const produtoId = sel.value;
+  if(!produtoId){ toast('Selecione um produto'); return; }
+  const produto = produtos.find(p => p.id == produtoId);
+  abrirFormEntrada(produto, null, codigo);
+}
+
+function abrirFormEntrada(produto, codigoInfo, codigoBarras){
+  entradaAtual = { produto, codigoInfo, codigoBarras, novoCodigoNecessario: !codigoInfo };
+  document.getElementById('ent-form-card').style.display = 'block';
+  document.getElementById('ent-produto-titulo').textContent = `2. Dados da entrada — ${produto.descricao}`;
+  document.getElementById('ent-unidade-base').textContent = produto.unidade;
+  document.getElementById('ent-unidade-base2').textContent = produto.unidade;
+  document.getElementById('ent-sem-codigo-aviso').style.display = codigoInfo ? 'none' : 'block';
+
+  if(codigoInfo){
+    document.getElementById('ent-fornecedor').value = codigoInfo.fornecedor_id || '';
+    document.getElementById('ent-unidade-compra').value = codigoInfo.unidade_compra || '';
+    document.getElementById('ent-fator').value = codigoInfo.fator_conversao || '';
+    document.getElementById('ent-unidade-compra').readOnly = true;
+    document.getElementById('ent-fator').readOnly = true;
+  } else {
+    document.getElementById('ent-unidade-compra').value = '';
+    document.getElementById('ent-fator').value = '';
+    document.getElementById('ent-unidade-compra').readOnly = false;
+    document.getElementById('ent-fator').readOnly = false;
+  }
+  calcularQtdTotal();
+}
+
+function calcularQtdTotal(){
+  const qtd = parseFloat(document.getElementById('ent-qtd-comprada').value)||0;
+  const fator = parseFloat(document.getElementById('ent-fator').value)||0;
+  document.getElementById('ent-qtd-total').value = fmtNum(qtd*fator) + ' ' + (entradaAtual?entradaAtual.produto.unidade:'');
+}
+['ent-qtd-comprada','ent-fator'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', calcularQtdTotal);
+});
+
+function cancelarEntrada(){
+  entradaAtual = null;
+  document.getElementById('ent-form-card').style.display = 'none';
+  document.getElementById('ent-etiqueta-card').style.display = 'none';
+  document.getElementById('ent-scan').value = '';
+  document.getElementById('ent-resultado').innerHTML = '';
+  document.getElementById('ent-scan').focus();
+}
+
+async function confirmarEntrada(){
+  if(!entradaAtual){ return; }
+  const qtdComprada = parseFloat(document.getElementById('ent-qtd-comprada').value);
+  const unidadeCompra = document.getElementById('ent-unidade-compra').value.trim();
+  const fator = parseFloat(document.getElementById('ent-fator').value);
+  const validade = document.getElementById('ent-validade').value;
+  const preco = document.getElementById('ent-preco').value;
+  const nf = document.getElementById('ent-nf').value;
+  const totalNf = document.getElementById('ent-total-nf').value;
+  const fornecedorId = document.getElementById('ent-fornecedor').value;
+
+  if(!qtdComprada || !unidadeCompra || !fator){
+    toast('Preencha quantidade, unidade de compra e fator de conversão'); return;
+  }
+
+  try{
+    let produtoCodigoId = entradaAtual.codigoInfo ? entradaAtual.codigoInfo.id : null;
+    let possuiCodigo = true;
+
+    if(entradaAtual.novoCodigoNecessario){
+      if(entradaAtual.codigoBarras){
+        const codRes = await api('/api/codigos', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            codigo_barras: entradaAtual.codigoBarras,
+            produto_id: entradaAtual.produto.id,
+            fornecedor_id: fornecedorId || null,
+            unidade_compra: unidadeCompra,
+            fator_conversao: fator
+          })
+        });
+        produtoCodigoId = codRes.codigo.id;
+      } else {
+        possuiCodigo = false; // produto sem código de barras de fábrica
+      }
+    }
+
+    const r = await api('/api/lotes', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        produto_id: entradaAtual.produto.id,
+        produto_codigo_id: produtoCodigoId,
+        fornecedor_id: fornecedorId || null,
+        quantidade_comprada: qtdComprada,
+        unidade_compra: unidadeCompra,
+        fator_conversao: fator,
+        data_validade: validade || null,
+        preco_unitario: preco || null,
+        numero_nf: nf || null,
+        total_nf: totalNf || null,
+        possui_codigo_barras: possuiCodigo
+      })
+    });
+
+    toast('✓ Entrada registrada: lote ' + r.lote.codigo_lote);
+    document.getElementById('ent-form-card').style.display = 'none';
+
+    if(r.precisa_etiqueta){
+      entradaAtual.loteGerado = r.lote;
+      document.getElementById('ent-etiqueta-card').style.display = 'block';
+    } else {
+      cancelarEntrada();
+    }
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+function fecharEtiquetaCard(){
+  document.getElementById('ent-etiqueta-card').style.display = 'none';
+  cancelarEntrada();
+}
+
+async function imprimirEtiquetaLote(){
+  const lote = entradaAtual.loteGerado;
+  if(!lote) return;
+  const area = document.getElementById('print-area');
+  area.innerHTML = `
+    <div style="width:100mm;padding:6mm;font-family:sans-serif">
+      <div style="font-size:13px;font-weight:700">${entradaAtual.produto.descricao}</div>
+      <div style="font-size:10px;color:#555;margin-bottom:4px">Lote: ${lote.codigo_lote}</div>
+      <svg id="etq-barcode"></svg>
+      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtNum(lote.quantidade_total)} ${lote.unidade}</div>
+    </div>`;
+  JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:50, fontSize:12 });
+  await api(`/api/lotes/${lote.id}/etiqueta-impressa`, { method:'PATCH' });
+  window.print();
+  fecharEtiquetaCard();
+}
+
+// ═══════════════════════ SAÍDA ═══════════════════════
+function setupSaidaScan(){
+  const inp = document.getElementById('sai-scan');
+  inp.addEventListener('keydown', async e => {
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      await buscarCodigoSaida(inp.value.trim());
+    }
+  });
+}
+
+async function buscarCodigoSaida(codigo){
+  if(!codigo) return;
+  const resDiv = document.getElementById('sai-resultado');
+  resDiv.innerHTML = '<p style="color:#888;font-size:13px">Buscando...</p>';
+  cancelarSaida(false);
+
+  try{
+    // 1) tenta como código de barras de fornecedor
+    let produtoId = null, produtoInfo = null;
+    const rCod = await fetch(`/api/codigos/${encodeURIComponent(codigo)}`);
+    const dCod = await rCod.json();
+    if(rCod.ok && dCod.encontrado){
+      produtoId = dCod.produto_id;
+      produtoInfo = { descricao: dCod.produto_descricao, codigo: dCod.produto_codigo };
+    } else {
+      // 2) tenta como código de lote (etiqueta interna)
+      const rLote = await fetch(`/api/lotes/by-codigo/${encodeURIComponent(codigo)}`);
+      const dLote = await rLote.json();
+      if(rLote.ok && dLote.ok){
+        resDiv.innerHTML = `<div class="badge badge-ok">✓ Lote reconhecido: ${dLote.lote.codigo_lote}</div>`;
+        selecionarLoteSaida(dLote.lote);
+        return;
+      }
+    }
+
+    if(!produtoId){
+      resDiv.innerHTML = `<div class="warn-box">Código <strong>${codigo}</strong> não reconhecido (nem como código de produto, nem como lote).</div>`;
+      return;
+    }
+
+    resDiv.innerHTML = `<div class="badge badge-ok">✓ Produto: ${produtoInfo.descricao}</div>`;
+    const lotes = await api(`/api/lotes?produto_id=${produtoId}&disponivel=1`);
+    if(lotes.length === 0){
+      resDiv.innerHTML += `<div class="warn-box" style="margin-top:8px">Nenhum lote disponível em estoque para este produto.</div>`;
+      return;
+    }
+    mostrarLotesSaida(lotes);
+  }catch(e){ resDiv.innerHTML = `<p style="color:#c0392b">Erro: ${e.message}</p>`; }
+}
+
+function mostrarLotesSaida(lotes){
+  const card = document.getElementById('sai-lotes-card');
+  card.style.display = 'block';
+  const lista = document.getElementById('sai-lotes-lista');
+  lista.innerHTML = lotes.map((l,i) => `
+    <div class="lote-pick ${i===0?'recomendado':''}" onclick='selecionarLoteSaidaJSON(this)' data-lote='${JSON.stringify(l).replace(/'/g,"&apos;")}'>
+      <div>
+        <span class="lote-tag">${l.codigo_lote}</span>
+        ${i===0?'<span class="badge badge-info" style="margin-left:6px">Mais antigo (FIFO)</span>':''}
+        <div style="color:#888;font-size:12px;margin-top:4px">Entrada: ${fmtData(l.data_entrada)} · Validade: ${fmtData(l.data_validade)} · Fornecedor: ${l.fornecedor_nome||'—'}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:600">${fmtNum(l.quantidade_atual)} ${l.unidade}</div>
+      </div>
+    </div>`).join('');
+}
+function selecionarLoteSaidaJSON(el){
+  const lote = JSON.parse(el.getAttribute('data-lote').replace(/&apos;/g,"'"));
+  document.querySelectorAll('.lote-pick').forEach(x=>x.classList.remove('selected'));
+  el.classList.add('selected');
+  selecionarLoteSaida(lote);
+}
+function selecionarLoteSaida(lote){
+  saidaAtual = { lote };
+  document.getElementById('sai-form-card').style.display = 'block';
+  document.getElementById('sai-qtd-disponivel').value = fmtNum(lote.quantidade_atual) + ' ' + lote.unidade;
+  document.getElementById('sai-qtd').value = '';
+  document.getElementById('sai-qtd').max = lote.quantidade_atual;
+}
+function cancelarSaida(reset=true){
+  saidaAtual = null;
+  document.getElementById('sai-lotes-card').style.display = 'none';
+  document.getElementById('sai-form-card').style.display = 'none';
+  if(reset){
+    document.getElementById('sai-scan').value = '';
+    document.getElementById('sai-resultado').innerHTML = '';
+    document.getElementById('sai-scan').focus();
+  }
+}
+async function confirmarSaida(){
+  if(!saidaAtual) return;
+  const qtd = parseFloat(document.getElementById('sai-qtd').value);
+  const destino = document.getElementById('sai-destino').value;
+  if(!qtd || qtd <= 0){ toast('Informe a quantidade'); return; }
+  try{
+    await api('/api/movimentacoes', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ tipo:'saida', lote_id: saidaAtual.lote.id, quantidade: qtd, destino })
+    });
+    toast('✓ Saída registrada');
+    cancelarSaida();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+// ═══════════════════════ ESTOQUE (LOTES) ═══════════════════════
+async function carregarEstoque(){
+  lotesCache = await api('/api/lotes?disponivel=1');
+  const cats = [...new Set(lotesCache.map(l=>l.categoria).filter(Boolean))];
+  document.getElementById('est-categoria').innerHTML = '<option value="">Todas categorias</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  renderEstoque();
+}
+function renderEstoque(){
+  const busca = (document.getElementById('est-busca').value||'').toLowerCase();
+  const cat = document.getElementById('est-categoria').value;
+  const filtrado = lotesCache.filter(l =>
+    (!busca || l.produto_descricao.toLowerCase().includes(busca)) &&
+    (!cat || l.categoria === cat)
+  );
+  document.getElementById('est-tbody').innerHTML = filtrado.map(l => `
+    <tr>
+      <td><span class="lote-tag">${l.codigo_lote}</span></td>
+      <td>${l.produto_descricao}</td>
+      <td>${l.categoria||'—'}</td>
+      <td>${fmtNum(l.quantidade_atual)} ${l.unidade}</td>
+      <td>${fmtData(l.data_validade)}</td>
+      <td>${l.fornecedor_nome||'—'}</td>
+      <td>${l.possui_codigo_barras ? '<span class="badge badge-gray">Cód. fornecedor</span>' : (l.etiqueta_impressa ? '<span class="badge badge-ok">Impressa</span>' : '<span class="badge badge-warn">Pendente</span>')}</td>
+      <td>${!l.possui_codigo_barras ? `<button class="btn btn-sm" onclick='reimprimirEtiqueta(${JSON.stringify(l).replace(/'/g,"&apos;")})'>🖨️</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="8" style="color:#aaa;text-align:center;padding:24px">Nenhum lote encontrado</td></tr>';
+}
+async function reimprimirEtiqueta(lote){
+  const area = document.getElementById('print-area');
+  area.innerHTML = `
+    <div style="width:100mm;padding:6mm;font-family:sans-serif">
+      <div style="font-size:13px;font-weight:700">${lote.produto_descricao}</div>
+      <div style="font-size:10px;color:#555;margin-bottom:4px">Lote: ${lote.codigo_lote}</div>
+      <svg id="etq-barcode"></svg>
+      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtNum(lote.quantidade_atual)} ${lote.unidade}</div>
+    </div>`;
+  JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:50, fontSize:12 });
+  window.print();
+}
+
+// ═══════════════════════ PRODUTOS ═══════════════════════
+async function carregarProdutos(){
+  produtos = await api('/api/produtos');
+  const tbody = document.getElementById('prod-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" style="color:#aaa">Carregando...</td></tr>';
+  const linhas = await Promise.all(produtos.map(async p => {
+    let codigos = [];
+    try{ codigos = await api(`/api/produtos/${p.id}/codigos`); }catch{}
+    const codigosHtml = codigos.length
+      ? codigos.map(c=>`<span class="badge badge-gray" style="margin-right:4px">${c.codigo_barras||'(sem cód.)'} · ${c.descricao_embalagem||c.unidade_compra}</span>`).join('')
+      : '<span style="color:#aaa">nenhum</span>';
+    return `<tr><td>${p.codigo}</td><td>${p.descricao}</td><td>${p.categoria||'—'}</td><td>${p.unidade}</td><td>${codigosHtml}</td></tr>`;
+  }));
+  tbody.innerHTML = linhas.join('') || '<tr><td colspan="5" style="color:#aaa;text-align:center;padding:24px">Nenhum produto cadastrado</td></tr>';
+}
+async function criarProduto(){
+  const codigo = document.getElementById('p-codigo').value.trim();
+  const descricao = document.getElementById('p-descricao').value.trim();
+  const categoria = document.getElementById('p-categoria').value.trim();
+  const unidade = document.getElementById('p-unidade').value.trim() || 'kg';
+  if(!codigo || !descricao){ toast('Código e descrição são obrigatórios'); return; }
+  try{
+    await api('/api/produtos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({codigo,descricao,categoria,unidade}) });
+    toast('✓ Produto criado');
+    ['p-codigo','p-descricao','p-categoria'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('p-unidade').value='kg';
+    carregarProdutos();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+// ═══════════════════════ FORNECEDORES ═══════════════════════
+async function carregarFornecedores(){
+  fornecedores = await api('/api/fornecedores');
+  document.getElementById('forn-tbody').innerHTML = fornecedores.map(f => `
+    <tr><td>${f.nome}</td><td>${f.cnpj||'—'}</td><td>${f.telefone||'—'}</td><td>${f.email||'—'}</td><td>${f.contato||'—'}</td></tr>
+  `).join('') || '<tr><td colspan="5" style="color:#aaa;text-align:center;padding:24px">Nenhum fornecedor cadastrado</td></tr>';
+}
+async function criarFornecedor(){
+  const nome = document.getElementById('f-nome').value.trim();
+  if(!nome){ toast('Nome é obrigatório'); return; }
+  const body = {
+    nome,
+    cnpj: document.getElementById('f-cnpj').value.trim(),
+    telefone: document.getElementById('f-telefone').value.trim(),
+    email: document.getElementById('f-email').value.trim(),
+    contato: document.getElementById('f-contato').value.trim()
+  };
+  try{
+    await api('/api/fornecedores', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    toast('✓ Fornecedor criado');
+    ['f-nome','f-cnpj','f-telefone','f-email','f-contato'].forEach(id=>document.getElementById(id).value='');
+    carregarFornecedores();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+// ═══════════════════════ MOVIMENTAÇÕES ═══════════════════════
+async function carregarMovimentacoes(){
+  const movs = await api('/api/movimentacoes');
+  document.getElementById('mov-tbody').innerHTML = movs.map(m => `
+    <tr>
+      <td>${fmtData(m.data)}</td>
+      <td><span class="badge ${m.tipo==='entrada'?'badge-ok':(m.tipo==='saida'?'badge-info':'badge-warn')}">${m.tipo}</span></td>
+      <td>${m.produto||'—'}</td>
+      <td>${m.codigo_lote?`<span class="lote-tag">${m.codigo_lote}</span>`:'—'}</td>
+      <td>${fmtNum(m.quantidade)} ${m.unidade||''}</td>
+      <td>${m.valor_total?fmtMoeda(m.valor_total):'—'}</td>
+      <td>${m.destino||m.obs||'—'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhuma movimentação</td></tr>';
+}
+
+// ═══════════════════════ AJUSTES ═══════════════════════
+async function carregarAjustes(){
+  const ajustes = await api('/api/ajustes');
+  document.getElementById('aj-tbody').innerHTML = ajustes.map(a => `
+    <tr>
+      <td>${fmtData(a.data)}</td>
+      <td>${a.codigo_lote?`<span class="lote-tag">${a.codigo_lote}</span>`:'—'}</td>
+      <td>${a.produto||'—'}</td>
+      <td>${fmtNum(a.antes)}</td>
+      <td>${fmtNum(a.depois)}</td>
+      <td class="${a.diff>0?'':(a.diff<0?'':'')}" style="color:${a.diff>0?'#1e7e34':(a.diff<0?'#c0392b':'#888')};font-weight:600">${a.diff>0?'+':''}${fmtNum(a.diff)}</td>
+      <td>${a.motivo||'—'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum ajuste registrado</td></tr>';
+}
+
+// ═══════════════════════ INIT ═══════════════════════
+(async function init(){
+  initNav();
+  setupEntradaScan();
+  setupSaidaScan();
+  try{ await carregarBase(); }catch(e){ console.error(e); }
+  showScreen('dashboard');
+})();
+</script>
+</body>
+</html>

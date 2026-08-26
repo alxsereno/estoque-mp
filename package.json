@@ -1,7 +1,7 @@
 {
   "name": "estoque-mp",
-  "version": "1.0.0",
-  "description": "Sistema de Estoque de Matéria-Prima com PostgreSQL",
+  "version": "2.0.0",
+  "description": "Sistema de Estoque de Matéria-Prima com PostgreSQL — v2 (lotes por código de barras, sem etiqueta obrigatória)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -11,170 +11,254 @@ const pool = new Pool({
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// ── PRODUTOS ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// PRODUTOS
+// ═══════════════════════════════════════════════════════════
 app.get('/api/produtos', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, codigo, descricao, categoria, unidade, origem
-       FROM produtos ORDER BY descricao`
+      `SELECT * FROM produtos WHERE ativo = TRUE ORDER BY descricao`
     );
     res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/produtos', async (req, res) => {
-  const { codigo, descricao, categoria, unidade } = req.body;
+  const { codigo, descricao, categoria, unidade, estoque_minimo } = req.body;
+  if(!codigo || !descricao){
+    return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
+  }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO produtos (codigo, descricao, categoria, unidade, origem)
-       VALUES ($1, $2, $3, $4, 'manual') RETURNING *`,
-      [codigo, descricao, categoria, unidade]
+      `INSERT INTO produtos (codigo, descricao, categoria, unidade, estoque_minimo, origem)
+       VALUES ($1,$2,$3,$4,$5,'manual') RETURNING *`,
+      [codigo, descricao, categoria || null, unidade || 'kg', estoque_minimo || null]
     );
-    res.json(rows[0]);
+    res.json({ ok: true, produto: rows[0] });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Código de produto já existe' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/produtos/:id', async (req, res) => {
+  const { descricao, categoria, unidade, estoque_minimo } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE produtos SET descricao=$1, categoria=$2, unidade=$3, estoque_minimo=$4
+       WHERE id=$5 RETURNING *`,
+      [descricao, categoria, unidade, estoque_minimo, req.params.id]
+    );
+    res.json({ ok: true, produto: rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/produtos/:codigo', async (req, res) => {
-  const { descricao, categoria, unidade } = req.body;
+app.delete('/api/produtos/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      `UPDATE produtos SET descricao=$1, categoria=$2, unidade=$3
-       WHERE codigo=$4 RETURNING *`,
-      [descricao, categoria, unidade, req.params.codigo]
-    );
-    res.json(rows[0]);
-  } catch(e){ res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/produtos/:codigo', async (req, res) => {
-  try {
-    await pool.query(
-      `DELETE FROM produtos WHERE codigo=$1 AND origem='manual'`,
-      [req.params.codigo]
-    );
+    await pool.query(`UPDATE produtos SET ativo = FALSE WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-// ── FORNECEDORES ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// FORNECEDORES
+// ═══════════════════════════════════════════════════════════
 app.get('/api/fornecedores', async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT * FROM fornecedores ORDER BY nome`
-    );
+    const { rows } = await pool.query(`SELECT * FROM fornecedores ORDER BY nome`);
     res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/fornecedores', async (req, res) => {
-  const { nome, cnpj, telefone, email, contato, obs } = req.body;
+  const { nome, razao, cnpj, telefone, email, contato, obs } = req.body;
+  if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO fornecedores (nome, cnpj, telefone, email, contato, obs, origem)
-       VALUES ($1,$2,$3,$4,$5,$6,'manual') RETURNING *`,
-      [nome, cnpj, telefone, email, contato, obs]
+      `INSERT INTO fornecedores (nome, razao, cnpj, telefone, email, contato, obs, origem)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'manual') RETURNING *`,
+      [nome, razao||'', cnpj||'', telefone||'', email||'', contato||'', obs||'']
     );
-    res.json(rows[0]);
+    res.json({ ok: true, fornecedor: rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/fornecedores/:id', async (req, res) => {
-  const { nome, cnpj, telefone, email, contato, obs } = req.body;
+// ═══════════════════════════════════════════════════════════
+// CÓDIGOS DE BARRAS (mapeamento código externo → produto interno)
+// ═══════════════════════════════════════════════════════════
+
+// Buscar produto por código de barras escaneado (recebimento ou saída)
+app.get('/api/codigos/:codigo', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `UPDATE fornecedores SET nome=$1,cnpj=$2,telefone=$3,email=$4,contato=$5,obs=$6
-       WHERE id=$7 RETURNING *`,
-      [nome, cnpj, telefone, email, contato, obs, req.params.id]
+      `SELECT pc.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao,
+              p.categoria, p.unidade AS produto_unidade
+       FROM produto_codigos pc
+       JOIN produtos p ON p.id = pc.produto_id
+       WHERE pc.codigo_barras = $1`,
+      [req.params.codigo]
     );
-    res.json(rows[0]);
+    if(rows.length === 0){
+      return res.status(404).json({ ok: false, encontrado: false });
+    }
+    res.json({ ok: true, encontrado: true, ...rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/fornecedores/:id', async (req, res) => {
+// Listar todos os códigos associados a um produto
+app.get('/api/produtos/:id/codigos', async (req, res) => {
   try {
-    await pool.query(
-      `DELETE FROM fornecedores WHERE id=$1 AND origem='manual'`,
+    const { rows } = await pool.query(
+      `SELECT pc.*, f.nome AS fornecedor_nome
+       FROM produto_codigos pc
+       LEFT JOIN fornecedores f ON f.id = pc.fornecedor_id
+       WHERE pc.produto_id = $1 ORDER BY pc.created_at DESC`,
       [req.params.id]
     );
-    res.json({ ok: true });
+    res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-// ── LOTES / EMBALAGENS ────────────────────────────────────
+// Associar um novo código de barras a um produto (1º recebimento daquela embalagem)
+app.post('/api/codigos', async (req, res) => {
+  const { codigo_barras, produto_id, fornecedor_id, descricao_embalagem, unidade_compra, fator_conversao } = req.body;
+  if(!produto_id || !unidade_compra || !fator_conversao){
+    return res.status(400).json({ error: 'produto_id, unidade_compra e fator_conversao são obrigatórios' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO produto_codigos
+        (codigo_barras, produto_id, fornecedor_id, descricao_embalagem, unidade_compra, fator_conversao)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [codigo_barras || null, produto_id, fornecedor_id || null,
+       descricao_embalagem || null, unidade_compra, fator_conversao]
+    );
+    res.json({ ok: true, codigo: rows[0] });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Este código de barras já está associado a um produto' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// LOTES (entrada de matéria-prima = 1 lote)
+// ═══════════════════════════════════════════════════════════
+
+function gerarCodigoLote(produtoCodigo){
+  const d = new Date();
+  const ymd = d.toISOString().slice(0,10).replace(/-/g,'');
+  const rand = Math.floor(Math.random()*900+100);
+  return `LOT-${ymd}-${produtoCodigo}-${rand}`;
+}
+
 app.get('/api/lotes', async (req, res) => {
+  const { produto_id, status, disponivel } = req.query;
   try {
-    const { rows } = await pool.query(
-      `SELECT * FROM lotes ORDER BY data_entrada DESC`
-    );
+    let q = `SELECT l.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao,
+                    p.categoria, f.nome AS fornecedor_nome
+             FROM lotes l
+             JOIN produtos p ON p.id = l.produto_id
+             LEFT JOIN fornecedores f ON f.id = l.fornecedor_id
+             WHERE 1=1`;
+    const vals = [];
+    if(produto_id){ vals.push(produto_id); q += ` AND l.produto_id = $${vals.length}`; }
+    if(status){ vals.push(status); q += ` AND l.status = $${vals.length}`; }
+    if(disponivel === '1'){ q += ` AND l.quantidade_atual > 0`; }
+    // FIFO: lote que entrou primeiro é sugerido primeiro
+    q += ` ORDER BY l.data_entrada ASC, l.id ASC`;
+    const { rows } = await pool.query(q, vals);
     res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+// Buscar lote específico pelo código impresso na etiqueta interna
+app.get('/api/lotes/by-codigo/:codigo_lote', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT l.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao, p.categoria
+       FROM lotes l JOIN produtos p ON p.id = l.produto_id
+       WHERE l.codigo_lote = $1`,
+      [req.params.codigo_lote]
+    );
+    if(rows.length === 0) return res.status(404).json({ ok:false, error: 'Lote não encontrado' });
+    res.json({ ok: true, lote: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// Registrar ENTRADA (cria lote + movimentação, faz a conversão de unidade)
 app.post('/api/lotes', async (req, res) => {
-  const l = req.body;
+  const {
+    produto_id, produto_codigo_id, fornecedor_id,
+    quantidade_comprada, unidade_compra, fator_conversao,
+    data_validade, preco_unitario, numero_nf, total_nf,
+    possui_codigo_barras
+  } = req.body;
+
+  if(!produto_id || !quantidade_comprada || !fator_conversao){
+    return res.status(400).json({ error: 'produto_id, quantidade_comprada e fator_conversao são obrigatórios' });
+  }
+
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
+    await client.query('BEGIN');
+
+    const prodRes = await client.query(`SELECT * FROM produtos WHERE id=$1`, [produto_id]);
+    if(prodRes.rows.length === 0) throw new Error('Produto não encontrado');
+    const produto = prodRes.rows[0];
+
+    const quantidadeTotal = parseFloat(quantidade_comprada) * parseFloat(fator_conversao);
+    const codigoLote = gerarCodigoLote(produto.codigo);
+
+    const loteRes = await client.query(
       `INSERT INTO lotes
-        (codigo_lote, produto_id, produto_descricao, categoria, unidade,
-         unidade_emb, tipo_emb, qtd_por_emb, data_entrada, data_validade,
-         quantidade_total, fornecedor, numero_nf, total_embalagens,
-         tipo_fracionamento, preco_unitario, total_nf)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        (codigo_lote, produto_id, produto_codigo_id, fornecedor_id,
+         quantidade_comprada, unidade_compra, fator_conversao,
+         quantidade_total, quantidade_atual, unidade,
+         data_validade, preco_unitario, numero_nf, total_nf,
+         possui_codigo_barras, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,$11,$12,$13,$14,'disponivel')
        RETURNING *`,
-      [l.codigo_lote, l.produto_id, l.produto_descricao, l.categoria,
-       l.unidade, l.unidade_emb, l.tipo_emb, l.qtd_por_emb,
-       l.data_entrada, l.data_validade, l.quantidade_total,
-       l.fornecedor, l.numero_nf, l.total_embalagens,
-       l.tipo_fracionamento, l.preco_unitario, l.total_nf]
+      [codigoLote, produto_id, produto_codigo_id || null, fornecedor_id || null,
+       quantidade_comprada, unidade_compra || produto.unidade, fator_conversao,
+       quantidadeTotal, produto.unidade,
+       data_validade || null, preco_unitario || null, numero_nf || null, total_nf || null,
+       possui_codigo_barras !== false]
     );
-    res.json(rows[0]);
-  } catch(e){ res.status(500).json({ error: e.message }); }
+    const lote = loteRes.rows[0];
+
+    await client.query(
+      `INSERT INTO movimentacoes (data, tipo, lote_id, codigo_lote, produto_id, produto, quantidade, unidade, preco_unitario, valor_total, obs)
+       VALUES (CURRENT_DATE,'entrada',$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [lote.id, lote.codigo_lote, produto_id, produto.descricao, quantidadeTotal, produto.unidade,
+       preco_unitario || null, preco_unitario ? (preco_unitario*quantidadeTotal) : null,
+       numero_nf ? `NF ${numero_nf}` : null]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, lote, precisa_etiqueta: possui_codigo_barras === false });
+  } catch(e){
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
-app.get('/api/embalagens', async (req, res) => {
+app.patch('/api/lotes/:id/etiqueta-impressa', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM embalagens ORDER BY id`
+      `UPDATE lotes SET etiqueta_impressa = TRUE WHERE id=$1 RETURNING *`,
+      [req.params.id]
     );
-    res.json(rows);
+    res.json({ ok: true, lote: rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/embalagens', async (req, res) => {
-  const e = req.body;
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO embalagens
-        (codigo, lote_id, codigo_lote, produto_id, produto_descricao,
-         categoria, unidade, tipo, quantidade, quantidade_atual,
-         data_validade, impressa, status, is_residuo)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-       RETURNING *`,
-      [e.codigo, e.lote_id, e.codigo_lote, e.produto_id,
-       e.produto_descricao, e.categoria, e.unidade, e.tipo,
-       e.quantidade, e.quantidade_atual, e.data_validade,
-       e.impressa||false, e.status||'disponivel', e.is_residuo||false]
-    );
-    res.json(rows[0]);
-  } catch(e){ res.status(500).json({ error: e.message }); }
-});
-
-app.patch('/api/embalagens/:id', async (req, res) => {
-  const fields = req.body;
-  const sets   = Object.keys(fields).map((k,i) => `${k}=$${i+2}`).join(',');
-  const vals   = Object.values(fields);
-  try {
-    const { rows } = await pool.query(
-      `UPDATE embalagens SET ${sets} WHERE id=$1 RETURNING *`,
-      [req.params.id, ...vals]
-    );
-    res.json(rows[0]);
-  } catch(e){ res.status(500).json({ error: e.message }); }
-});
-
-// ── MOVIMENTAÇÕES ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// MOVIMENTAÇÕES (saída / devolução — abate quantidade_atual do lote)
+// ═══════════════════════════════════════════════════════════
 app.get('/api/movimentacoes', async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -185,38 +269,161 @@ app.get('/api/movimentacoes', async (req, res) => {
 });
 
 app.post('/api/movimentacoes', async (req, res) => {
-  const m = req.body;
+  const { tipo, lote_id, quantidade, destino, obs } = req.body;
+  if(!tipo || !lote_id || !quantidade){
+    return res.status(400).json({ error: 'tipo, lote_id e quantidade são obrigatórios' });
+  }
+  if(!['saida','devolucao'].includes(tipo)){
+    return res.status(400).json({ error: "tipo deve ser 'saida' ou 'devolucao'" });
+  }
+
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO movimentacoes (data, tipo, produto, codigo, lote, quantidade, destino)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [m.data, m.tipo, m.produto, m.codigo, m.lote, m.quantidade, m.destino]
+    await client.query('BEGIN');
+
+    const loteRes = await client.query(
+      `SELECT l.*, p.descricao AS produto_descricao FROM lotes l
+       JOIN produtos p ON p.id = l.produto_id WHERE l.id=$1 FOR UPDATE`,
+      [lote_id]
     );
-    res.json(rows[0]);
-  } catch(e){ res.status(500).json({ error: e.message }); }
+    if(loteRes.rows.length === 0) throw new Error('Lote não encontrado');
+    const lote = loteRes.rows[0];
+
+    const qtd = parseFloat(quantidade);
+    if(tipo === 'saida' && qtd > parseFloat(lote.quantidade_atual)){
+      throw new Error(`Quantidade insuficiente no lote (disponível: ${lote.quantidade_atual} ${lote.unidade})`);
+    }
+
+    const novaQtd = tipo === 'saida'
+      ? parseFloat(lote.quantidade_atual) - qtd
+      : parseFloat(lote.quantidade_atual) + qtd;
+
+    await client.query(
+      `UPDATE lotes SET quantidade_atual=$1, status=$2 WHERE id=$3`,
+      [novaQtd, novaQtd <= 0 ? 'esgotado' : 'disponivel', lote_id]
+    );
+
+    const valorTotal = lote.preco_unitario ? (lote.preco_unitario * qtd) : null;
+
+    const movRes = await client.query(
+      `INSERT INTO movimentacoes (data, tipo, lote_id, codigo_lote, produto_id, produto, quantidade, unidade, preco_unitario, valor_total, destino, obs)
+       VALUES (CURRENT_DATE,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [tipo, lote_id, lote.codigo_lote, lote.produto_id, lote.produto_descricao, qtd, lote.unidade,
+       lote.preco_unitario, valorTotal, destino || null, obs || null]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, movimentacao: movRes.rows[0], quantidade_atual: novaQtd });
+  } catch(e){
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
-// ── AJUSTES ───────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// AJUSTES
+// ═══════════════════════════════════════════════════════════
 app.get('/api/ajustes', async (req, res) => {
   try {
-    const { rows } = await pool.query(`SELECT * FROM ajustes ORDER BY id DESC`);
+    const { rows } = await pool.query(`SELECT * FROM ajustes ORDER BY id DESC LIMIT 1000`);
     res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/ajustes', async (req, res) => {
-  const a = req.body;
+  const { lote_id, antes, depois, motivo, obs } = req.body;
+  if(!lote_id || antes === undefined || depois === undefined){
+    return res.status(400).json({ error: 'lote_id, antes e depois são obrigatórios' });
+  }
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO ajustes (data, codigo, produto, lote, antes, depois, diff, motivo, obs)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [a.data, a.codigo, a.produto, a.lote, a.antes, a.depois, a.diff, a.motivo, a.obs]
+    await client.query('BEGIN');
+    const loteRes = await client.query(
+      `SELECT l.*, p.descricao AS produto_descricao FROM lotes l
+       JOIN produtos p ON p.id=l.produto_id WHERE l.id=$1 FOR UPDATE`, [lote_id]
     );
-    res.json(rows[0]);
+    if(loteRes.rows.length === 0) throw new Error('Lote não encontrado');
+    const lote = loteRes.rows[0];
+    const diff = parseFloat(depois) - parseFloat(antes);
+
+    await client.query(
+      `UPDATE lotes SET quantidade_atual=$1, status=$2 WHERE id=$3`,
+      [depois, parseFloat(depois) <= 0 ? 'esgotado' : 'disponivel', lote_id]
+    );
+
+    const ajRes = await client.query(
+      `INSERT INTO ajustes (data, lote_id, codigo_lote, produto, antes, depois, diff, motivo, obs)
+       VALUES (CURRENT_DATE,$1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [lote_id, lote.codigo_lote, lote.produto_descricao, antes, depois, diff, motivo||null, obs||null]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, ajuste: ajRes.rows[0] });
+  } catch(e){
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const cfgRes = await pool.query(`SELECT valor FROM configuracoes WHERE chave='validade'`);
+    let critico = 7, atencao = 30;
+    if(cfgRes.rows.length){
+      try { const v = JSON.parse(cfgRes.rows[0].valor); critico = v.critico; atencao = v.atencao; } catch{}
+    }
+
+    const valorPorCategoria = await pool.query(
+      `SELECT COALESCE(p.categoria,'Sem categoria') AS categoria,
+              SUM(l.quantidade_atual * COALESCE(l.preco_unitario,0)) AS valor,
+              SUM(l.quantidade_atual) AS quantidade
+       FROM lotes l JOIN produtos p ON p.id=l.produto_id
+       WHERE l.quantidade_atual > 0
+       GROUP BY p.categoria ORDER BY valor DESC`
+    );
+
+    const vencendo = await pool.query(
+      `SELECT l.*, p.descricao AS produto_descricao, p.categoria,
+              (l.data_validade - CURRENT_DATE) AS dias_restantes
+       FROM lotes l JOIN produtos p ON p.id=l.produto_id
+       WHERE l.quantidade_atual > 0 AND l.data_validade IS NOT NULL
+         AND l.data_validade <= CURRENT_DATE + ($1 || ' days')::interval
+       ORDER BY l.data_validade ASC`,
+      [atencao]
+    );
+
+    const baixasHoje = await pool.query(
+      `SELECT COALESCE(SUM(valor_total),0) AS valor_total, COALESCE(SUM(quantidade),0) AS quantidade_total, COUNT(*) AS total_movimentacoes
+       FROM movimentacoes WHERE tipo='saida' AND data = CURRENT_DATE`
+    );
+
+    const valorTotalEstoque = await pool.query(
+      `SELECT COALESCE(SUM(quantidade_atual * COALESCE(preco_unitario,0)),0) AS total FROM lotes WHERE quantidade_atual > 0`
+    );
+
+    res.json({
+      valor_total_estoque: parseFloat(valorTotalEstoque.rows[0].total),
+      valor_por_categoria: valorPorCategoria.rows,
+      lotes_vencendo: vencendo.rows.map(r => ({
+        ...r,
+        criticidade: r.dias_restantes <= critico ? 'critico' : (r.dias_restantes <= atencao ? 'atencao' : 'ok')
+      })),
+      baixas_hoje: baixasHoje.rows[0],
+      limites: { critico, atencao }
+    });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-// ── CONFIGURAÇÕES ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// CONFIGURAÇÕES
+// ═══════════════════════════════════════════════════════════
 app.get('/api/config', async (req, res) => {
   try {
     const { rows } = await pool.query(`SELECT chave, valor FROM configuracoes`);
@@ -230,8 +437,7 @@ app.post('/api/config', async (req, res) => {
   const { chave, valor } = req.body;
   try {
     await pool.query(
-      `INSERT INTO configuracoes (chave, valor)
-       VALUES ($1,$2)
+      `INSERT INTO configuracoes (chave, valor) VALUES ($1,$2)
        ON CONFLICT (chave) DO UPDATE SET valor=EXCLUDED.valor`,
       [chave, JSON.stringify(valor)]
     );
@@ -239,239 +445,12 @@ app.post('/api/config', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-
-
-// ── BUSCAR DADOS DO BANCO ───────────────────────────────────
-app.get('/api/embalagens', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM embalagens ORDER BY id DESC LIMIT 5000'
-    );
-    res.json(result.rows);
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/lotes', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM lotes ORDER BY id DESC LIMIT 1000'
-    );
-    res.json(result.rows);
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/movimentacoes', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM movimentacoes ORDER BY id DESC LIMIT 1000'
-    );
-    res.json(result.rows);
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/ajustes', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM ajustes ORDER BY id DESC LIMIT 1000'
-    );
-    res.json(result.rows);
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/produtos', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM produtos ORDER BY id DESC LIMIT 5000'
-    );
-    res.json(result.rows);
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/fornecedores', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM fornecedores ORDER BY id DESC LIMIT 1000'
-    );
-    res.json(result.rows);
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── CRIAR NOVOS PRODUTOS ─────────────────────────────────────
-app.post('/api/produtos', async (req, res) => {
-  const { codigo, descricao, categoria, unidade } = req.body;
-  
-  if(!codigo || !descricao){
-    return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
-  }
-  
-  try {
-    const result = await pool.query(
-      `INSERT INTO produtos (codigo, descricao, categoria, unidade, origem)
-       VALUES ($1, $2, $3, $4, 'manual')
-       RETURNING *`,
-      [codigo, descricao, categoria, unidade]
-    );
-    res.json({ ok: true, produto: result.rows[0] });
-  } catch(e){
-    if(e.code === '23505'){
-      res.status(400).json({ error: 'Código de produto já existe' });
-    } else {
-      res.status(500).json({ error: e.message });
-    }
-  }
-});
-
-// ── CRIAR NOVOS FORNECEDORES ─────────────────────────────────
-app.post('/api/fornecedores', async (req, res) => {
-  const { nome, razao, cnpj, telefone, email, contato, obs } = req.body;
-  
-  if(!nome){
-    return res.status(400).json({ error: 'Nome é obrigatório' });
-  }
-  
-  try {
-    const result = await pool.query(
-      `INSERT INTO fornecedores (nome, razao, cnpj, telefone, email, contato, obs, origem)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual')
-       RETURNING *`,
-      [nome, razao || '', cnpj || '', telefone || '', email || '', contato || '', obs || '']
-    );
-    res.json({ ok: true, fornecedor: result.rows[0] });
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── REGISTRAR MOVIMENTAÇÕES ──────────────────────────────────
-app.post('/api/movimentacoes', async (req, res) => {
-  const { data, tipo, produto, codigo, lote, quantidade, destino } = req.body;
-  
-  if(!tipo || !codigo){
-    return res.status(400).json({ error: 'Tipo e código são obrigatórios' });
-  }
-  
-  try {
-    const result = await pool.query(
-      `INSERT INTO movimentacoes (data, tipo, produto, codigo, lote, quantidade, destino)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [data || new Date().toISOString().split('T')[0], tipo, produto, codigo, lote, quantidade, destino]
-    );
-    res.json({ ok: true, movimentacao: result.rows[0] });
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── REGISTRAR AJUSTES ────────────────────────────────────────
-app.post('/api/ajustes', async (req, res) => {
-  const { data, codigo, produto, lote, antes, depois, motivo, obs } = req.body;
-  
-  if(!codigo || antes === undefined || depois === undefined){
-    return res.status(400).json({ error: 'Código, antes e depois são obrigatórios' });
-  }
-  
-  const diff = parseFloat(depois) - parseFloat(antes);
-  
-  try {
-    const result = await pool.query(
-      `INSERT INTO ajustes (data, codigo, produto, lote, antes, depois, diff, motivo, obs)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
-      [data || new Date().toISOString().split('T')[0], codigo, produto, lote, antes, depois, diff, motivo, obs]
-    );
-    res.json({ ok: true, ajuste: result.rows[0] });
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── IMPORTAR DADOS ───────────────────────────────────
-app.post('/api/importar-lotes', async (req, res) => {
-  const { lotes } = req.body;
-  
-  if(!Array.isArray(lotes) || lotes.length === 0){
-    return res.status(400).json({ error: 'Nenhum lote para importar' });
-  }
-  
-  try {
-    let importados = 0;
-    let duplicados = 0;
-    let erros = 0;
-    
-    for(const lote of lotes){
-      try {
-        // Verificar se já existe
-        const existe = await pool.query(
-          'SELECT id FROM embalagens WHERE codigo = $1',
-          [lote.codigo]
-        );
-        
-        if(existe.rows.length > 0){
-          duplicados++;
-          continue;
-        }
-        
-        // Inserir novo lote (CAMPOS QUE EXISTEM NA TABELA)
-        await pool.query(
-          `INSERT INTO embalagens
-            (codigo, codigo_lote, produto_descricao, categoria, quantidade,
-             quantidade_atual, unidade, data_validade, status, is_residuo, impressa)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [
-            lote.codigo,
-            lote.codigo_lote,
-            lote.produto_descricao,
-            lote.categoria,
-            lote.quantidade,
-            lote.quantidade,
-            lote.unidade,
-            lote.data_validade,
-            lote.status || 'disponivel',
-            lote.is_residuo || false,
-            true
-          ]
-        );
-        
-        importados++;
-      } catch(e){
-        console.error('Erro ao importar lote:', e.message);
-        erros++;
-      }
-    }
-    
-    res.json({
-      ok: true,
-      importados,
-      duplicados,
-      erros,
-      total: importados + duplicados + erros
-    });
-    
-  } catch(e){
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── HEALTH CHECK ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date() }));
 
-// ── FRONTEND (catch-all) ──────────────────────────────────
 app.get('*', (_, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Estoque MP rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`Estoque MP v2 rodando na porta ${PORT}`));
