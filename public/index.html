@@ -1306,12 +1306,12 @@ async function excluirCategoria(id, nome){
   }catch(e){ toast('Erro: '+e.message); }
 }
 
-function parseCSVLineProd(line){
+function parseCSVLineProd(line, delim){
   const result = []; let current=''; let inQuotes=false;
   for(let i=0;i<line.length;i++){
     const c=line[i], next=line[i+1];
     if(c==='"'){ if(inQuotes && next==='"'){ current+='"'; i++; } else inQuotes=!inQuotes; }
-    else if(c===',' && !inQuotes){ result.push(current.trim()); current=''; }
+    else if(c===delim && !inQuotes){ result.push(current.trim()); current=''; }
     else current+=c;
   }
   result.push(current.trim());
@@ -1334,11 +1334,15 @@ async function importarProdutos(){
   const reader = new FileReader();
   reader.onload = async (e) => {
     try{
-      const text = e.target.result;
-      const lines = text.trim().split('\n').filter(l => l.trim());
+      // remove BOM (comum em CSV exportado do Excel) e normaliza quebras de linha
+      const text = e.target.result.replace(/^\uFEFF/, '');
+      const lines = text.trim().split(/\r\n|\r|\n/).map(l => l.trim()).filter(l => l);
       if(lines.length < 2){ resDiv.innerHTML = '<p style="color:#c0392b">Arquivo vazio ou sem dados</p>'; document.getElementById('imp-btn').disabled=false; return; }
 
-      const header = parseCSVLineProd(lines[0]).map(h => h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+      // detecta separador: ; é comum em CSV exportado do Excel em português
+      const delim = (lines[0].split(';').length > lines[0].split(',').length) ? ';' : ',';
+
+      const header = parseCSVLineProd(lines[0], delim).map(h => h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
       const idx = {
         codigo: header.findIndex(h => h.includes('codigo')),
         descricao: header.findIndex(h => h.includes('descricao') || h.includes('nome')),
@@ -1354,7 +1358,7 @@ async function importarProdutos(){
 
       const lista = [];
       for(let i=1;i<lines.length;i++){
-        const cells = parseCSVLineProd(lines[i]);
+        const cells = parseCSVLineProd(lines[i], delim);
         lista.push({
           codigo: cells[idx.codigo] || '',
           descricao: cells[idx.descricao] || '',
