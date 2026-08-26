@@ -22,7 +22,7 @@ nav{flex:1;padding:12px 10px;overflow-y:auto}
 .nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;cursor:pointer;font-size:13px;color:#555;border-radius:8px;transition:all .15s;margin-bottom:2px}
 .nav-item:hover{background:#f8f8f5;color:#1a1a18}
 .nav-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
-.nav-icon{width:16px;text-align:center;font-size:13px;flex-shrink:0}
+.nav-icon{width:17px;height:17px;flex-shrink:0}
 .content{flex:1;overflow-y:auto;padding:28px 32px}
 .screen{display:none}.screen.active{display:block}
 h1{font-size:20px;font-weight:600;margin-bottom:4px}
@@ -121,14 +121,71 @@ tr:hover td{background:#fafaf7}
 .view-toggle button{padding:7px 14px;font-size:12px;border:none;background:#fff;cursor:pointer;color:#666}
 .view-toggle button.active{background:#1a1a18;color:#fff}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-soft);color:var(--brand-dark);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.topbar-user{text-align:right;font-size:12px;line-height:1.3}
+.topbar-user b{display:block;font-size:13px}
+.topbar-user span{color:#888}
+.logout-btn{background:none;border:none;cursor:pointer;color:#999;font-size:17px;padding:4px}
+.logout-btn:hover{color:#c0392b}
+#login-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#f3faf4,#eef7ee);padding:20px}
+.login-icon{width:64px;height:64px;border-radius:16px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:14px}
+.login-title{font-size:22px;font-weight:700;color:var(--brand-dark);margin-bottom:2px;text-align:center}
+.login-sub{color:#888;font-size:13px;margin-bottom:26px;text-align:center}
+.login-box{background:#fff;border-radius:14px;padding:32px;width:340px;max-width:90vw;box-shadow:0 10px 40px rgba(0,0,0,.08);text-align:center}
+.login-label{font-size:13px;color:#666;margin-bottom:16px}
+.pin-dots{display:flex;gap:12px;justify-content:center;margin-bottom:24px}
+.pin-dot{width:52px;height:56px;border:1px solid #ddd;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#1a1a18}
+.pin-dot.filled{border-color:var(--brand)}
+.pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pin-key{padding:16px 0;border:1px solid #ddd;border-radius:10px;background:#fff;font-size:18px;font-weight:600;color:#1a1a18;cursor:pointer;transition:all .1s}
+.pin-key:hover{background:#f5f5f2}
+.pin-key:active{transform:scale(.95)}
+.pin-error{color:#c0392b;font-size:12px;margin-bottom:12px;min-height:16px}
 </style>
 </head>
 <body>
-<div class="app">
+
+<div id="login-screen" style="display:none">
+  <div class="login-icon">📦</div>
+  <div class="login-title">Simples e Natural</div>
+  <div class="login-sub">Sistema Estoque MP</div>
+  <div class="login-box">
+    <div class="login-label">Digite seu PIN para entrar</div>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot" data-i="0"></div>
+      <div class="pin-dot" data-i="1"></div>
+      <div class="pin-dot" data-i="2"></div>
+      <div class="pin-dot" data-i="3"></div>
+    </div>
+    <div class="pin-error" id="pin-error"></div>
+    <div class="pin-keypad">
+      <button class="pin-key" onclick="pinDigito('1')">1</button>
+      <button class="pin-key" onclick="pinDigito('2')">2</button>
+      <button class="pin-key" onclick="pinDigito('3')">3</button>
+      <button class="pin-key" onclick="pinDigito('4')">4</button>
+      <button class="pin-key" onclick="pinDigito('5')">5</button>
+      <button class="pin-key" onclick="pinDigito('6')">6</button>
+      <button class="pin-key" onclick="pinDigito('7')">7</button>
+      <button class="pin-key" onclick="pinDigito('8')">8</button>
+      <button class="pin-key" onclick="pinDigito('9')">9</button>
+      <button class="pin-key" onclick="pinBackspace()">←</button>
+      <button class="pin-key" onclick="pinDigito('0')">0</button>
+      <button class="pin-key" onclick="pinLimpar()">C</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app-shell" style="display:none">
 <header class="topbar no-print">
   <div class="topbar-left">
     <div class="topbar-icon">📦</div>
     <div class="topbar-title">Estoque MP<span>Simples e Natural</span></div>
+  </div>
+  <div class="topbar-right">
+    <div class="topbar-user"><b id="topbar-user-nome">—</b><span id="topbar-user-role">—</span></div>
+    <div class="avatar" id="topbar-avatar">—</div>
+    <button class="logout-btn" title="Sair" onclick="fazerLogout()">⏻</button>
   </div>
 </header>
 <div class="app-body">
@@ -452,6 +509,21 @@ tr:hover td{background:#fafaf7}
     </table></div>
   </section>
 
+  <!-- USUÁRIOS -->
+  <section class="screen" id="s-usuarios">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <h1>Usuários</h1>
+        <p class="sub">Quem pode entrar no sistema. Apenas administradores podem criar e gerenciar usuários.</p>
+      </div>
+      <button class="btn btn-dark" onclick="abrirNovoUsuario()">+ Novo usuário</button>
+    </div>
+    <div class="card"><table>
+      <thead><tr><th>Nome</th><th>Permissão</th><th>PIN</th><th></th></tr></thead>
+      <tbody id="usu-tbody"></tbody>
+    </table></div>
+  </section>
+
 </main>
 </div>
 </div>
@@ -466,33 +538,108 @@ let produtos = [], fornecedores = [], categorias = [], unidades = [], lotesCache
 let arquivoProdutosSelecionado = null;
 let entradaAtual = null; // dados temporários do fluxo de entrada
 let saidaAtual = null;   // dados temporários do fluxo de saída
+let sessaoToken = localStorage.getItem('estoquemp_token') || null;
+let sessaoUsuario = null;
+try{ sessaoUsuario = JSON.parse(localStorage.getItem('estoquemp_usuario') || 'null'); }catch{}
+let pinDigitado = '';
+
+// ═══════════════════════ LOGIN / SESSÃO ═══════════════════════
+function pinDigito(d){
+  if(pinDigitado.length >= 4) return;
+  pinDigitado += d;
+  renderPinDots();
+  if(pinDigitado.length === 4) tentarLogin();
+}
+function pinBackspace(){ pinDigitado = pinDigitado.slice(0,-1); renderPinDots(); }
+function pinLimpar(){ pinDigitado = ''; renderPinDots(); document.getElementById('pin-error').textContent = ''; }
+function renderPinDots(){
+  document.querySelectorAll('.pin-dot').forEach((el,i) => {
+    el.textContent = i < pinDigitado.length ? '•' : '';
+    el.classList.toggle('filled', i < pinDigitado.length);
+  });
+}
+async function tentarLogin(){
+  try{
+    const data = await fetch('/api/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({pin: pinDigitado})
+    }).then(async r => { const d = await r.json(); if(!r.ok) throw new Error(d.error||'Erro'); return d; });
+    sessaoToken = data.token;
+    sessaoUsuario = data.usuario;
+    localStorage.setItem('estoquemp_token', sessaoToken);
+    localStorage.setItem('estoquemp_usuario', JSON.stringify(sessaoUsuario));
+    pinDigitado = '';
+    await entrarNoApp();
+  }catch(e){
+    document.getElementById('pin-error').textContent = e.message;
+    pinDigitado = '';
+    renderPinDots();
+  }
+}
+function fazerLogout(){
+  sessaoToken = null; sessaoUsuario = null;
+  localStorage.removeItem('estoquemp_token'); localStorage.removeItem('estoquemp_usuario');
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  pinDigitado = ''; renderPinDots();
+  document.getElementById('pin-error').textContent = '';
+}
+async function entrarNoApp(){
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-shell').style.display = 'block';
+  document.getElementById('topbar-user-nome').textContent = sessaoUsuario.nome;
+  document.getElementById('topbar-user-role').textContent = sessaoUsuario.role === 'admin' ? 'Admin' : 'Operador';
+  document.getElementById('topbar-avatar').textContent = sessaoUsuario.nome.slice(0,2).toUpperCase();
+  initNav();
+  try{ await carregarBase(); }catch(e){ console.error(e); }
+  showScreen('dashboard');
+}
+
+const ICONS = {
+  home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
+  scale: '<path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6a3 3 0 0 0 6 0z"/><path d="M19 7l-3 6a3 3 0 0 0 6 0z"/>',
+  truck: '<rect x="2" y="7" width="12" height="9"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="18.5" r="1.6"/><circle cx="17" cy="18.5" r="1.6"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+  users: '<circle cx="9" cy="8" r="3"/><path d="M2.5 20c0-3.3 2.9-5 6.5-5s6.5 1.7 6.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15 20c0-2.4 1.7-4 4.5-4"/>',
+  entrada: '<path d="M12 3v10M8 9l4 4 4-4"/><path d="M4 15v5h16v-5"/>',
+  saida: '<path d="M12 13V3M8 7l4-4 4 4"/><path d="M4 15v5h16v-5"/>',
+  box: '<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
+  calc: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6.5h8"/><path d="M8 10.5h2M12 10.5h2M16 10.5h0M8 14.5h2M12 14.5h2M16 14.5h0M8 18.5h2M12 18.5h2"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>',
+  clipboard: '<path d="M9 3h6v3H9z"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 12h6M9 16h6"/>'
+};
+function svgIcon(name){
+  return `<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+}
 
 const SCREENS = [
-  {id:'dashboard', icon:'🏠', label:'Início', grupo:'Visão geral'},
-  {id:'produtos', icon:'⚖️', label:'Produtos', grupo:'Cadastros'},
-  {id:'fornecedores', icon:'🚚', label:'Fornecedores', grupo:'Cadastros'},
-  {id:'config', icon:'⚙️', label:'Configurações', grupo:'Cadastros'},
-  {id:'entrada', icon:'📥', label:'Entrada', grupo:'Operação'},
-  {id:'saida', icon:'📤', label:'Saída', grupo:'Operação'},
-  {id:'estoque', icon:'📦', label:'Estoque', grupo:'Operação'},
-  {id:'inventario', icon:'🧮', label:'Inventário', grupo:'Operação'},
-  {id:'movimentacoes', icon:'📋', label:'Movimentações', grupo:'Operação'},
-  {id:'ajustes', icon:'📝', label:'Ajustes', grupo:'Operação'},
+  {id:'dashboard', icon:'home', label:'Início', grupo:'Visão geral'},
+  {id:'produtos', icon:'scale', label:'Produtos', grupo:'Cadastros'},
+  {id:'fornecedores', icon:'truck', label:'Fornecedores', grupo:'Cadastros'},
+  {id:'config', icon:'gear', label:'Configurações', grupo:'Cadastros'},
+  {id:'usuarios', icon:'users', label:'Usuários', grupo:'Cadastros', adminOnly:true},
+  {id:'entrada', icon:'entrada', label:'Entrada', grupo:'Operação'},
+  {id:'saida', icon:'saida', label:'Saída', grupo:'Operação'},
+  {id:'estoque', icon:'box', label:'Estoque', grupo:'Operação'},
+  {id:'inventario', icon:'calc', label:'Inventário', grupo:'Operação'},
+  {id:'movimentacoes', icon:'list', label:'Movimentações', grupo:'Operação'},
+  {id:'ajustes', icon:'clipboard', label:'Ajustes', grupo:'Operação'},
 ];
 
 function initNav(){
   const nav = document.getElementById('nav');
-  const grupos = [...new Set(SCREENS.map(s=>s.grupo))];
+  const visiveis = SCREENS.filter(s => !s.adminOnly || (sessaoUsuario && sessaoUsuario.role === 'admin'));
+  const grupos = [...new Set(visiveis.map(s=>s.grupo))];
   nav.innerHTML = grupos.map(g => `
     <div class="nav-group-label">${g}</div>
-    ${SCREENS.filter(s=>s.grupo===g).map(s => `<div class="nav-item" data-screen="${s.id}" onclick="showScreen('${s.id}')"><span class="nav-icon">${s.icon}</span>${s.label}</div>`).join('')}
+    ${visiveis.filter(s=>s.grupo===g).map(s => `<div class="nav-item" data-screen="${s.id}" onclick="showScreen('${s.id}')">${svgIcon(s.icon)}${s.label}</div>`).join('')}
   `).join('');
 }
 
 const CARREGADORES = {
   dashboard: carregarDashboard, estoque: carregarEstoque, inventario: carregarInventario,
   produtos: carregarProdutos, fornecedores: carregarFornecedores,
-  movimentacoes: carregarMovimentacoes, ajustes: carregarAjustes, config: carregarConfig
+  movimentacoes: carregarMovimentacoes, ajustes: carregarAjustes, config: carregarConfig,
+  usuarios: carregarUsuarios
 };
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -532,8 +679,12 @@ function catBadge(nome){
 }
 
 async function api(path, opts){
-  const r = await fetch(API + path, opts);
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers);
+  if(sessaoToken) headers['Authorization'] = 'Bearer ' + sessaoToken;
+  const r = await fetch(API + path, Object.assign({}, opts, { headers }));
   const data = await r.json().catch(()=>({}));
+  if(r.status === 401){ fazerLogout(); throw new Error(data.error || 'Sessão expirada'); }
   if(!r.ok) throw new Error(data.error || 'Erro na requisição');
   return data;
 }
@@ -1419,13 +1570,134 @@ async function salvarInventario(){
   carregarInventario();
 }
 
+document.addEventListener('keydown', e => {
+  if(document.getElementById('login-screen').style.display === 'none') return;
+  if(/^[0-9]$/.test(e.key)) pinDigito(e.key);
+  else if(e.key === 'Backspace') pinBackspace();
+  else if(e.key === 'Escape') pinLimpar();
+});
+
+// ═══════════════════════ USUÁRIOS ═══════════════════════
+const ROLE_LABEL = { admin: 'Admin', operador: 'Operador' };
+const ROLE_BADGE = { admin: 'badge-danger', operador: 'badge-info' };
+async function carregarUsuarios(){
+  const lista = await api('/api/usuarios');
+  document.getElementById('usu-tbody').innerHTML = lista.map(u => `
+    <tr>
+      <td style="display:flex;align-items:center;gap:10px">
+        <div class="avatar">${u.nome.slice(0,2).toUpperCase()}</div>
+        <div>${u.nome}${sessaoUsuario && sessaoUsuario.id===u.id ? '<div style="font-size:11px;color:var(--brand)">você</div>' : ''}</div>
+      </td>
+      <td><span class="badge ${ROLE_BADGE[u.role]}">${ROLE_LABEL[u.role]}</span></td>
+      <td>••••</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick="editarUsuario(${u.id},'${u.nome.replace(/'/g,"\\'")}','${u.role}')">Editar</button>
+        <button class="btn btn-sm" onclick="abrirModalPin(${u.id},'${u.nome.replace(/'/g,"\\'")}')">PIN</button>
+        ${sessaoUsuario && sessaoUsuario.id===u.id ? '' : `<button class="btn-icon" title="Inativar" onclick="inativarUsuario(${u.id},'${u.nome.replace(/'/g,"\\'")}')">⊘</button>`}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="4" style="color:#aaa;text-align:center;padding:24px">Nenhum usuário cadastrado</td></tr>';
+}
+function abrirNovoUsuario(){
+  abrirModal('Novo usuário', `
+    <div class="field" style="margin-bottom:12px"><label>Nome completo</label><input id="modal-u-nome" placeholder="Ex: Maria Silva"></div>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="field"><label>PIN (4 dígitos)</label><input id="modal-u-pin" maxlength="4" inputmode="numeric" placeholder="0000"></div>
+      <div class="field"><label>Permissão</label>
+        <select id="modal-u-role"><option value="operador">Operador — executa entrada/saída/estoque</option><option value="admin">Admin — acesso completo</option></select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarNovoUsuario()">Criar usuário</button>
+    </div>
+  `);
+}
+async function salvarNovoUsuario(){
+  const nome = document.getElementById('modal-u-nome').value.trim();
+  const pin = document.getElementById('modal-u-pin').value.trim();
+  const role = document.getElementById('modal-u-role').value;
+  if(!nome || !/^\d{4}$/.test(pin)){ toast('Nome e PIN de 4 dígitos são obrigatórios'); return; }
+  try{
+    await api('/api/usuarios', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({nome,pin,role}) });
+    toast('✓ Usuário criado');
+    fecharModal();
+    carregarUsuarios();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+function editarUsuario(id, nome, role){
+  abrirModal('Editar usuário', `
+    <div class="field" style="margin-bottom:12px"><label>Nome completo</label><input id="modal-u-nome" value="${nome.replace(/"/g,'&quot;')}"></div>
+    <div class="field" style="margin-bottom:16px"><label>Permissão</label>
+      <select id="modal-u-role">
+        <option value="operador" ${role==='operador'?'selected':''}>Operador — executa entrada/saída/estoque</option>
+        <option value="admin" ${role==='admin'?'selected':''}>Admin — acesso completo</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarEdicaoUsuario(${id})">Salvar alterações</button>
+    </div>
+  `);
+}
+async function salvarEdicaoUsuario(id){
+  const nome = document.getElementById('modal-u-nome').value.trim();
+  const role = document.getElementById('modal-u-role').value;
+  if(!nome){ toast('Nome é obrigatório'); return; }
+  try{
+    await api(`/api/usuarios/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({nome,role}) });
+    toast('✓ Usuário atualizado');
+    fecharModal();
+    carregarUsuarios();
+    if(sessaoUsuario && sessaoUsuario.id === id){ sessaoUsuario.nome = nome; sessaoUsuario.role = role; localStorage.setItem('estoquemp_usuario', JSON.stringify(sessaoUsuario)); entrarNoApp(); }
+  }catch(e){ toast('Erro: '+e.message); }
+}
+function abrirModalPin(id, nome){
+  abrirModal('Definir novo PIN — ' + nome, `
+    <div class="field" style="margin-bottom:16px"><label>Novo PIN (4 dígitos)</label><input id="modal-u-novopin" maxlength="4" inputmode="numeric" placeholder="0000"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarNovoPin(${id})">Salvar PIN</button>
+    </div>
+  `);
+}
+async function salvarNovoPin(id){
+  const pin = document.getElementById('modal-u-novopin').value.trim();
+  if(!/^\d{4}$/.test(pin)){ toast('PIN deve ter 4 dígitos'); return; }
+  try{
+    await api(`/api/usuarios/${id}/pin`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({pin}) });
+    toast('✓ PIN atualizado');
+    fecharModal();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function inativarUsuario(id, nome){
+  if(!confirm(`Inativar o usuário "${nome}"? Ele não vai mais conseguir entrar no sistema.`)) return;
+  try{
+    await api(`/api/usuarios/${id}`, { method:'DELETE' });
+    toast('✓ Usuário inativado');
+    carregarUsuarios();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
 // ═══════════════════════ INIT ═══════════════════════
 (async function init(){
-  initNav();
   setupEntradaScan();
   setupSaidaScan();
-  try{ await carregarBase(); }catch(e){ console.error(e); }
-  showScreen('dashboard');
+  renderPinDots();
+
+  if(sessaoToken){
+    try{
+      const r = await fetch('/api/auth/me', { headers:{'Authorization':'Bearer '+sessaoToken} });
+      if(!r.ok) throw new Error('inválido');
+      const data = await r.json();
+      sessaoUsuario = data.usuario;
+      await entrarNoApp();
+      return;
+    }catch(e){
+      sessaoToken = null; sessaoUsuario = null;
+      localStorage.removeItem('estoquemp_token'); localStorage.removeItem('estoquemp_usuario');
+    }
+  }
+  document.getElementById('login-screen').style.display = 'flex';
 })();
 </script>
 </body>

@@ -146,6 +146,23 @@ ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS configuracoes (chave VARCHAR(50) PRIMARY KEY, valor TEXT);
 
+-- Usuários do sistema (login por PIN de 4 dígitos)
+CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nome VARCHAR(120);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(64);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'operador';
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'usuarios_pin_hash_key') THEN
+    ALTER TABLE usuarios ADD CONSTRAINT usuarios_pin_hash_key UNIQUE (pin_hash);
+  END IF;
+END $$;
+-- usuário admin padrão, PIN inicial 0000 — troque assim que possível em Usuários
+INSERT INTO usuarios (nome, pin_hash, role) VALUES
+  ('Admin', '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0', 'admin')
+ON CONFLICT (pin_hash) DO NOTHING;
+
 -- Unidades de medida cadastráveis (usadas nos selects de unidade de compra)
 CREATE TABLE IF NOT EXISTS unidades (id SERIAL PRIMARY KEY);
 ALTER TABLE unidades ADD COLUMN IF NOT EXISTS sigla VARCHAR(10);

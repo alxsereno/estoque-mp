@@ -2,6 +2,8 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors    = require('cors');
 const path    = require('path');
+const crypto  = require('crypto');
+const jwt     = require('jsonwebtoken');
 
 const app = express();
 const pool = new Pool({
@@ -9,8 +11,63 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
+// IMPORTANTE: defina a variável de ambiente JWT_SECRET no Railway (Variables)
+// com um valor aleatório longo. Sem isso, um valor padrão é usado — funciona,
+// mas não é seguro para produção.
+const JWT_SECRET = process.env.JWT_SECRET || 'estoque-mp-dev-secret-troque-isso';
+const hashPin = (pin) => crypto.createHash('sha256').update(String(pin)).digest('hex');
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// ═══════════════════════════════════════════════════════════
+// AUTENTICAÇÃO (login por PIN de 4 dígitos)
+// ═══════════════════════════════════════════════════════════
+app.post('/api/auth/login', async (req, res) => {
+  const { pin } = req.body;
+  if(!pin || !/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN deve ter 4 dígitos' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, nome, role FROM usuarios WHERE pin_hash = $1 AND ativo = TRUE`,
+      [hashPin(pin)]
+    );
+    if(rows.length === 0) return res.status(401).json({ error: 'PIN incorreto' });
+    const usuario = rows[0];
+    const token = jwt.sign({ id: usuario.id, nome: usuario.nome, role: usuario.role }, JWT_SECRET, { expiresIn: '16h' });
+    res.json({ ok: true, token, usuario });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if(!token) return res.status(401).json({ error: 'Não autenticado' });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    res.json({ ok: true, usuario: { id: payload.id, nome: payload.nome, role: payload.role } });
+  } catch(e){ res.status(401).json({ error: 'Sessão expirada, faça login novamente' }); }
+});
+
+// Middleware: exige login válido em toda rota /api/*, exceto login/health.
+// Ordem importa: precisa vir depois das rotas públicas acima e antes das protegidas abaixo.
+app.use('/api', (req, res, next) => {
+  if(req.path === '/auth/login' || req.path === '/health') return next();
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if(!token) return res.status(401).json({ error: 'Não autenticado' });
+  try {
+    req.usuario = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch(e){ res.status(401).json({ error: 'Sessão expirada, faça login novamente' }); }
+});
+
+function requireAdmin(req, res, next){
+  if(!req.usuario || req.usuario.role !== 'admin'){
+    return res.status(403).json({ error: 'Apenas administradores podem fazer isso' });
+  }
+  next();
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ═══════════════════════════════════════════════════════════
@@ -27,7 +84,7 @@ app.get('/api/categorias', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/categorias', async (req, res) => {
+app.post('/api/categorias', requireAdmin, async (req, res) => {
   const { nome, cor } = req.body;
   if(!nome) return res.status(400).json({ error: 'Nome da categoria é obrigatório' });
   try {
@@ -42,7 +99,7 @@ app.post('/api/categorias', async (req, res) => {
   }
 });
 
-app.put('/api/categorias/:id', async (req, res) => {
+app.put('/api/categorias/:id', requireAdmin, async (req, res) => {
   const { nome, cor } = req.body;
   try {
     const { rows } = await pool.query(
@@ -56,7 +113,7 @@ app.put('/api/categorias/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/categorias/:id', async (req, res) => {
+app.delete('/api/categorias/:id', requireAdmin, async (req, res) => {
   try {
     // produtos ligados a essa categoria ficam sem categoria (ON DELETE SET NULL)
     await pool.query(`DELETE FROM categorias WHERE id=$1`, [req.params.id]);
@@ -78,7 +135,7 @@ app.get('/api/produtos', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/produtos', async (req, res) => {
+app.post('/api/produtos', requireAdmin, async (req, res) => {
   const { codigo, descricao, categoria_id, unidade, estoque_minimo } = req.body;
   if(!codigo || !descricao){
     return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
@@ -96,7 +153,7 @@ app.post('/api/produtos', async (req, res) => {
   }
 });
 
-app.put('/api/produtos/:id', async (req, res) => {
+app.put('/api/produtos/:id', requireAdmin, async (req, res) => {
   const { descricao, categoria_id, unidade, estoque_minimo } = req.body;
   try {
     const { rows } = await pool.query(
@@ -108,7 +165,7 @@ app.put('/api/produtos/:id', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/produtos/:id', async (req, res) => {
+app.delete('/api/produtos/:id', requireAdmin, async (req, res) => {
   try {
     await pool.query(`UPDATE produtos SET ativo = FALSE WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
@@ -117,7 +174,7 @@ app.delete('/api/produtos/:id', async (req, res) => {
 
 // Importação em lote de produtos (planilha/CSV já parseado no frontend).
 // Cria categorias que ainda não existem, pula produtos com código já cadastrado.
-app.post('/api/produtos/importar', async (req, res) => {
+app.post('/api/produtos/importar', requireAdmin, async (req, res) => {
   const { produtos: lista } = req.body;
   if(!Array.isArray(lista) || lista.length === 0){
     return res.status(400).json({ error: 'Nenhum produto para importar' });
@@ -185,7 +242,7 @@ app.get('/api/fornecedores', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/fornecedores', async (req, res) => {
+app.post('/api/fornecedores', requireAdmin, async (req, res) => {
   const { nome, razao, cnpj, telefone, email, contato, obs } = req.body;
   if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
   try {
@@ -198,7 +255,7 @@ app.post('/api/fornecedores', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/fornecedores/:id', async (req, res) => {
+app.put('/api/fornecedores/:id', requireAdmin, async (req, res) => {
   const { nome, razao, cnpj, telefone, email, contato, obs } = req.body;
   if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
   try {
@@ -211,7 +268,7 @@ app.put('/api/fornecedores/:id', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/fornecedores/:id', async (req, res) => {
+app.delete('/api/fornecedores/:id', requireAdmin, async (req, res) => {
   try {
     await pool.query(`UPDATE fornecedores SET ativo = FALSE WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
@@ -580,7 +637,7 @@ app.get('/api/unidades', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/unidades', async (req, res) => {
+app.post('/api/unidades', requireAdmin, async (req, res) => {
   const { sigla, nome } = req.body;
   if(!sigla || !nome) return res.status(400).json({ error: 'Sigla e nome são obrigatórios' });
   try {
@@ -595,7 +652,7 @@ app.post('/api/unidades', async (req, res) => {
   }
 });
 
-app.delete('/api/unidades/:id', async (req, res) => {
+app.delete('/api/unidades/:id', requireAdmin, async (req, res) => {
   try {
     await pool.query(`DELETE FROM unidades WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
@@ -614,7 +671,7 @@ app.get('/api/config', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/config', async (req, res) => {
+app.post('/api/config', requireAdmin, async (req, res) => {
   const { chave, valor } = req.body;
   try {
     await pool.query(
@@ -627,6 +684,75 @@ app.post('/api/config', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// USUÁRIOS (login por PIN) — todas as rotas exigem admin
+// ═══════════════════════════════════════════════════════════
+app.get('/api/usuarios', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, nome, role, ativo, created_at FROM usuarios ORDER BY nome`
+    );
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/usuarios', requireAdmin, async (req, res) => {
+  const { nome, pin, role } = req.body;
+  if(!nome || !pin || !role) return res.status(400).json({ error: 'Nome, PIN e permissão são obrigatórios' });
+  if(!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN deve ter exatamente 4 dígitos' });
+  if(!['admin','operador'].includes(role)) return res.status(400).json({ error: 'Permissão inválida' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO usuarios (nome, pin_hash, role) VALUES ($1,$2,$3) RETURNING id, nome, role, ativo, created_at`,
+      [nome.trim(), hashPin(pin), role]
+    );
+    res.json({ ok: true, usuario: rows[0] });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Esse PIN já está em uso por outro usuário' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/usuarios/:id', requireAdmin, async (req, res) => {
+  const { nome, role } = req.body;
+  if(!nome || !role) return res.status(400).json({ error: 'Nome e permissão são obrigatórios' });
+  if(!['admin','operador'].includes(role)) return res.status(400).json({ error: 'Permissão inválida' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE usuarios SET nome=$1, role=$2 WHERE id=$3 RETURNING id, nome, role, ativo, created_at`,
+      [nome.trim(), role, req.params.id]
+    );
+    res.json({ ok: true, usuario: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/usuarios/:id/pin', requireAdmin, async (req, res) => {
+  const { pin } = req.body;
+  if(!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN deve ter exatamente 4 dígitos' });
+  try {
+    await pool.query(`UPDATE usuarios SET pin_hash=$1 WHERE id=$2`, [hashPin(pin), req.params.id]);
+    res.json({ ok: true });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Esse PIN já está em uso por outro usuário' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/usuarios/:id', requireAdmin, async (req, res) => {
+  if(String(req.usuario.id) === String(req.params.id)){
+    return res.status(400).json({ error: 'Você não pode inativar seu próprio usuário' });
+  }
+  try {
+    const admins = await pool.query(`SELECT COUNT(*) FROM usuarios WHERE role='admin' AND ativo=TRUE`);
+    const alvo = await pool.query(`SELECT role FROM usuarios WHERE id=$1`, [req.params.id]);
+    if(alvo.rows[0]?.role === 'admin' && parseInt(admins.rows[0].count) <= 1){
+      return res.status(400).json({ error: 'Não é possível inativar o último administrador' });
+    }
+    await pool.query(`UPDATE usuarios SET ativo = FALSE WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date() }));
 
 app.get('*', (_, res) => {
