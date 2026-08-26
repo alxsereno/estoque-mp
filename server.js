@@ -180,7 +180,7 @@ app.post('/api/produtos/importar', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 app.get('/api/fornecedores', async (req, res) => {
   try {
-    const { rows } = await pool.query(`SELECT * FROM fornecedores ORDER BY nome`);
+    const { rows } = await pool.query(`SELECT * FROM fornecedores WHERE COALESCE(ativo,TRUE) = TRUE ORDER BY nome`);
     res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
@@ -195,6 +195,26 @@ app.post('/api/fornecedores', async (req, res) => {
       [nome, razao||'', cnpj||'', telefone||'', email||'', contato||'', obs||'']
     );
     res.json({ ok: true, fornecedor: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/fornecedores/:id', async (req, res) => {
+  const { nome, razao, cnpj, telefone, email, contato, obs } = req.body;
+  if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE fornecedores SET nome=$1, razao=$2, cnpj=$3, telefone=$4, email=$5, contato=$6, obs=$7
+       WHERE id=$8 RETURNING *`,
+      [nome, razao||'', cnpj||'', telefone||'', email||'', contato||'', obs||'', req.params.id]
+    );
+    res.json({ ok: true, fornecedor: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/fornecedores/:id', async (req, res) => {
+  try {
+    await pool.query(`UPDATE fornecedores SET ativo = FALSE WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -376,10 +396,21 @@ app.patch('/api/lotes/:id/etiqueta-impressa', async (req, res) => {
 // MOVIMENTAÇÕES (saída / devolução — abate quantidade_atual do lote)
 // ═══════════════════════════════════════════════════════════
 app.get('/api/movimentacoes', async (req, res) => {
+  const { codigo, categoria_id, data_de, data_ate, tipo } = req.query;
   try {
-    const { rows } = await pool.query(
-      `SELECT * FROM movimentacoes ORDER BY id DESC LIMIT 1000`
-    );
+    let q = `SELECT m.*, p.codigo AS produto_codigo, c.nome AS categoria
+             FROM movimentacoes m
+             LEFT JOIN produtos p ON p.id = m.produto_id
+             LEFT JOIN categorias c ON c.id = p.categoria_id
+             WHERE 1=1`;
+    const vals = [];
+    if(codigo){ vals.push('%'+codigo+'%'); q += ` AND (p.codigo ILIKE $${vals.length} OR m.produto ILIKE $${vals.length})`; }
+    if(categoria_id){ vals.push(categoria_id); q += ` AND p.categoria_id = $${vals.length}`; }
+    if(tipo){ vals.push(tipo); q += ` AND m.tipo = $${vals.length}`; }
+    if(data_de){ vals.push(data_de); q += ` AND m.data >= $${vals.length}`; }
+    if(data_ate){ vals.push(data_ate); q += ` AND m.data <= $${vals.length}`; }
+    q += ` ORDER BY m.id DESC LIMIT 1000`;
+    const { rows } = await pool.query(q, vals);
     res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });

@@ -2,6 +2,13 @@
 --  ESTOQUE MP v2 — Schema PostgreSQL
 --  Rode este arquivo no banco do Railway para criar/atualizar as tabelas
 --
+--  Este script é seguro de rodar MAIS DE UMA VEZ, mesmo que uma
+--  execução anterior tenha parado no meio do caminho: toda tabela usa
+--  CREATE TABLE IF NOT EXISTS e, em seguida, ADD COLUMN IF NOT EXISTS
+--  para cada coluna — então mesmo uma tabela "incompleta" de uma
+--  tentativa anterior é corrigida para o formato certo antes de
+--  criarmos qualquer índice ou dado.
+--
 --  Mudança de lógica em relação à v1:
 --  - Não existe mais "embalagens" (1 etiqueta por unidade recebida).
 --  - Cada entrada de matéria-prima gera 1 LOTE, que já é a unidade de
@@ -14,115 +21,174 @@
 -- ═══════════════════════════════════════════════════════════
 
 -- Categorias cadastradas pelo usuário (tela de Configurações)
-CREATE TABLE IF NOT EXISTS categorias (
-  id         SERIAL PRIMARY KEY,
-  nome       VARCHAR(100) UNIQUE NOT NULL,
-  cor        VARCHAR(20),
-  created_at TIMESTAMP DEFAULT NOW()
-);
+CREATE TABLE IF NOT EXISTS categorias (id SERIAL PRIMARY KEY);
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS nome VARCHAR(100);
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS cor VARCHAR(20);
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'categorias_nome_key') THEN
+    ALTER TABLE categorias ADD CONSTRAINT categorias_nome_key UNIQUE (nome);
+  END IF;
+END $$;
 
-CREATE TABLE IF NOT EXISTS produtos (
-  id         SERIAL PRIMARY KEY,
-  codigo     VARCHAR(50)  UNIQUE NOT NULL,   -- código interno (ex: 001)
-  descricao  VARCHAR(300) NOT NULL,
-  categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
-  unidade    VARCHAR(10)  NOT NULL DEFAULT 'kg', -- unidade BASE de controle de estoque
-  estoque_minimo NUMERIC(12,4),
-  origem     VARCHAR(20) DEFAULT 'manual',
-  ativo      BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW()
-);
+CREATE TABLE IF NOT EXISTS produtos (id SERIAL PRIMARY KEY);
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS codigo VARCHAR(50);
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS descricao VARCHAR(300);
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS unidade VARCHAR(10) DEFAULT 'kg';
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS estoque_minimo NUMERIC(12,4);
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS origem VARCHAR(20) DEFAULT 'manual';
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'produtos_codigo_key') THEN
+    ALTER TABLE produtos ADD CONSTRAINT produtos_codigo_key UNIQUE (codigo);
+  END IF;
+END $$;
+-- se ainda existir a coluna antiga de texto livre "categoria", migra os dados e remove
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='produtos' AND column_name='categoria') THEN
+    INSERT INTO categorias (nome)
+    SELECT DISTINCT categoria FROM produtos
+    WHERE categoria IS NOT NULL AND btrim(categoria) <> ''
+    ON CONFLICT (nome) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS fornecedores (
-  id        SERIAL PRIMARY KEY,
-  nome      VARCHAR(200) NOT NULL,
-  razao     VARCHAR(200),
-  cnpj      VARCHAR(20),
-  telefone  VARCHAR(30),
-  email     VARCHAR(100),
-  contato   VARCHAR(100),
-  obs       TEXT,
-  origem    VARCHAR(20) DEFAULT 'manual',
-  created_at TIMESTAMP DEFAULT NOW()
-);
+    UPDATE produtos p SET categoria_id = c.id
+    FROM categorias c
+    WHERE c.nome = p.categoria AND p.categoria_id IS NULL;
+
+    ALTER TABLE produtos DROP COLUMN categoria;
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS fornecedores (id SERIAL PRIMARY KEY);
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS nome VARCHAR(200);
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS razao VARCHAR(200);
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS cnpj VARCHAR(20);
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS telefone VARCHAR(30);
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS email VARCHAR(100);
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS contato VARCHAR(100);
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS obs TEXT;
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS origem VARCHAR(20) DEFAULT 'manual';
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
 
 -- Mapeamento código de barras (de fábrica/fornecedor) → produto interno.
--- Um mesmo produto pode ter N códigos (embalagens/fornecedores diferentes),
--- cada um com seu próprio fator de conversão para a unidade base do produto.
-CREATE TABLE IF NOT EXISTS produto_codigos (
-  id                  SERIAL PRIMARY KEY,
-  produto_id          INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
-  codigo_barras       VARCHAR(80) UNIQUE NOT NULL,
-  fornecedor_id       INTEGER REFERENCES fornecedores(id),
-  descricao_embalagem VARCHAR(200),          -- ex: "Pacote 5kg", "Saco 25kg"
-  unidade_compra      VARCHAR(20) NOT NULL DEFAULT 'un', -- ex: pacote, saco, caixa, kg
-  fator_conversao     NUMERIC(12,4) NOT NULL DEFAULT 1,  -- 1 unidade_compra = X unidade base do produto
-  created_at          TIMESTAMP DEFAULT NOW()
-);
+CREATE TABLE IF NOT EXISTS produto_codigos (id SERIAL PRIMARY KEY);
+ALTER TABLE produto_codigos ADD COLUMN IF NOT EXISTS produto_id INTEGER REFERENCES produtos(id) ON DELETE CASCADE;
+ALTER TABLE produto_codigos ADD COLUMN IF NOT EXISTS codigo_barras VARCHAR(80);
+ALTER TABLE produto_codigos ADD COLUMN IF NOT EXISTS fornecedor_id INTEGER REFERENCES fornecedores(id);
+ALTER TABLE produto_codigos ADD COLUMN IF NOT EXISTS descricao_embalagem VARCHAR(200);
+ALTER TABLE produto_codigos ADD COLUMN IF NOT EXISTS unidade_compra VARCHAR(20) DEFAULT 'un';
+ALTER TABLE produto_codigos ADD COLUMN IF NOT EXISTS fator_conversao NUMERIC(12,4) DEFAULT 1;
+ALTER TABLE produto_codigos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'produto_codigos_codigo_barras_key') THEN
+    ALTER TABLE produto_codigos ADD CONSTRAINT produto_codigos_codigo_barras_key UNIQUE (codigo_barras);
+  END IF;
+END $$;
 
--- Cada entrada de matéria-prima = 1 lote. É a unidade de controle de
--- estoque (substitui as "embalagens" individuais da v1).
-CREATE TABLE IF NOT EXISTS lotes (
-  id                   SERIAL PRIMARY KEY,
-  codigo_lote          VARCHAR(50) UNIQUE NOT NULL,
-  produto_id           INTEGER NOT NULL REFERENCES produtos(id),
-  produto_codigo_id    INTEGER REFERENCES produto_codigos(id), -- código de barras usado nesta entrada (se houver)
-  fornecedor_id        INTEGER REFERENCES fornecedores(id),
-  quantidade_comprada  NUMERIC(12,4),          -- na unidade de compra (ex: 10 pacotes)
-  unidade_compra       VARCHAR(20),
-  fator_conversao      NUMERIC(12,4) DEFAULT 1,
-  quantidade_total     NUMERIC(12,4) NOT NULL, -- já convertida p/ unidade base (ex: 50 kg)
-  quantidade_atual     NUMERIC(12,4) NOT NULL, -- vai sendo abatida nas saídas
-  unidade               VARCHAR(10),
-  data_entrada         DATE DEFAULT CURRENT_DATE,
-  data_validade        DATE,
-  preco_unitario       NUMERIC(12,4),          -- preço por unidade BASE (para custo/valor de estoque)
-  numero_nf            VARCHAR(50),
-  total_nf              NUMERIC(12,2),
-  possui_codigo_barras BOOLEAN DEFAULT TRUE,   -- FALSE = precisa etiqueta interna p/ ser lido na saída
-  etiqueta_impressa    BOOLEAN DEFAULT FALSE,
-  status               VARCHAR(20) DEFAULT 'disponivel', -- disponivel, esgotado
-  origem                VARCHAR(20) DEFAULT 'manual',
-  created_at           TIMESTAMP DEFAULT NOW()
-);
+-- Cada entrada de matéria-prima = 1 lote. É a unidade de controle de estoque.
+CREATE TABLE IF NOT EXISTS lotes (id SERIAL PRIMARY KEY);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS codigo_lote VARCHAR(50);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS produto_id INTEGER REFERENCES produtos(id);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS produto_codigo_id INTEGER REFERENCES produto_codigos(id);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS fornecedor_id INTEGER REFERENCES fornecedores(id);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS quantidade_comprada NUMERIC(12,4);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS unidade_compra VARCHAR(20);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS fator_conversao NUMERIC(12,4) DEFAULT 1;
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS quantidade_total NUMERIC(12,4);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS quantidade_atual NUMERIC(12,4);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS unidade VARCHAR(10);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS data_entrada DATE DEFAULT CURRENT_DATE;
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS data_validade DATE;
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS preco_unitario NUMERIC(12,4);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS numero_nf VARCHAR(50);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS total_nf NUMERIC(12,2);
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS possui_codigo_barras BOOLEAN DEFAULT TRUE;
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS etiqueta_impressa BOOLEAN DEFAULT FALSE;
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'disponivel';
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS origem VARCHAR(20) DEFAULT 'manual';
+ALTER TABLE lotes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lotes_codigo_lote_key') THEN
+    ALTER TABLE lotes ADD CONSTRAINT lotes_codigo_lote_key UNIQUE (codigo_lote);
+  END IF;
+END $$;
 
-CREATE TABLE IF NOT EXISTS movimentacoes (
-  id             SERIAL PRIMARY KEY,
-  data           DATE DEFAULT CURRENT_DATE,
-  tipo           VARCHAR(20) NOT NULL,   -- entrada, saida, devolucao
-  lote_id        INTEGER REFERENCES lotes(id),
-  codigo_lote    VARCHAR(50),
-  produto_id     INTEGER REFERENCES produtos(id),
-  produto        VARCHAR(300),
-  quantidade     NUMERIC(12,4),
-  unidade        VARCHAR(10),
-  preco_unitario NUMERIC(12,4),
-  valor_total    NUMERIC(12,2),
-  destino        VARCHAR(200),
-  obs            TEXT,
-  created_at     TIMESTAMP DEFAULT NOW()
-);
+CREATE TABLE IF NOT EXISTS movimentacoes (id SERIAL PRIMARY KEY);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS data DATE DEFAULT CURRENT_DATE;
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS tipo VARCHAR(20);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS lote_id INTEGER REFERENCES lotes(id);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS codigo_lote VARCHAR(50);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS produto_id INTEGER REFERENCES produtos(id);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS produto VARCHAR(300);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS quantidade NUMERIC(12,4);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS unidade VARCHAR(10);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS preco_unitario NUMERIC(12,4);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS valor_total NUMERIC(12,2);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS destino VARCHAR(200);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS obs TEXT;
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
 
-CREATE TABLE IF NOT EXISTS ajustes (
-  id         SERIAL PRIMARY KEY,
-  data       VARCHAR(30),
-  lote_id    INTEGER REFERENCES lotes(id),
-  codigo_lote VARCHAR(50),
-  produto    VARCHAR(300),
-  antes      NUMERIC(12,4),
-  depois     NUMERIC(12,4),
-  diff       NUMERIC(12,4),
-  motivo     VARCHAR(200),
-  obs        VARCHAR(200),
-  created_at TIMESTAMP DEFAULT NOW()
-);
+CREATE TABLE IF NOT EXISTS ajustes (id SERIAL PRIMARY KEY);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS data VARCHAR(30);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS lote_id INTEGER REFERENCES lotes(id);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS codigo_lote VARCHAR(50);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS produto VARCHAR(300);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS antes NUMERIC(12,4);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS depois NUMERIC(12,4);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS diff NUMERIC(12,4);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS motivo VARCHAR(200);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS obs VARCHAR(200);
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
 
-CREATE TABLE IF NOT EXISTS configuracoes (
-  chave  VARCHAR(50) PRIMARY KEY,
-  valor  TEXT
-);
+CREATE TABLE IF NOT EXISTS configuracoes (chave VARCHAR(50) PRIMARY KEY, valor TEXT);
 
--- Índices para performance
+-- ═══════════════════════════════════════════════════════════
+-- CORREÇÃO DE TIPOS HERDADOS DA v1: nas tabelas lotes/movimentacoes,
+-- algumas colunas já existiam (criadas pela v1) com tipo TEXTO em vez
+-- do tipo correto da v2 (INTEGER/DATE/NUMERIC) — isso quebra os JOINs
+-- e cálculos ("operator does not exist: integer = character varying").
+-- Este bloco corrige o tipo apenas se ainda estiver errado; se a coluna
+-- já estiver certa, não faz nada. Valores que não conseguem ser
+-- convertidos viram NULL (mais seguro que travar a migração).
+-- ═══════════════════════════════════════════════════════════
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lotes' AND column_name='produto_id' AND data_type <> 'integer') THEN
+    ALTER TABLE lotes ALTER COLUMN produto_id TYPE INTEGER USING (
+      CASE WHEN produto_id::text ~ '^[0-9]+$' THEN produto_id::text::INTEGER ELSE NULL END
+    );
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lotes' AND column_name='data_entrada' AND data_type <> 'date') THEN
+    ALTER TABLE lotes ALTER COLUMN data_entrada TYPE DATE USING (
+      CASE WHEN data_entrada::text ~ '^\d{4}-\d{2}-\d{2}$' THEN data_entrada::text::DATE ELSE CURRENT_DATE END
+    );
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lotes' AND column_name='data_validade' AND data_type <> 'date') THEN
+    ALTER TABLE lotes ALTER COLUMN data_validade TYPE DATE USING (
+      CASE WHEN data_validade::text ~ '^\d{4}-\d{2}-\d{2}$' THEN data_validade::text::DATE ELSE NULL END
+    );
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='movimentacoes' AND column_name='data' AND data_type <> 'date') THEN
+    ALTER TABLE movimentacoes ALTER COLUMN data TYPE DATE USING (
+      CASE WHEN data::text ~ '^\d{4}-\d{2}-\d{2}$' THEN data::text::DATE ELSE CURRENT_DATE END
+    );
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='movimentacoes' AND column_name='quantidade' AND data_type NOT IN ('numeric','double precision','integer')) THEN
+    ALTER TABLE movimentacoes ALTER COLUMN quantidade TYPE NUMERIC(12,4) USING (
+      CASE WHEN quantidade::text ~ '^[0-9]+(\.[0-9]+)?$' THEN quantidade::text::NUMERIC ELSE NULL END
+    );
+  END IF;
+END $$;
+
+-- Índices para performance (agora seguro: todas as colunas acima já existem)
 CREATE INDEX IF NOT EXISTS idx_produtos_categoria ON produtos(categoria_id);
 CREATE INDEX IF NOT EXISTS idx_lotes_produto    ON lotes(produto_id);
 CREATE INDEX IF NOT EXISTS idx_lotes_status      ON lotes(status);
@@ -137,43 +203,6 @@ INSERT INTO configuracoes (chave, valor) VALUES
   ('validade',  '{"critico":7,"atencao":30}'),
   ('etiqueta',  '{"larguraMm":100,"alturaMm":60,"dpi":203}')
 ON CONFLICT (chave) DO NOTHING;
-
--- ═══════════════════════════════════════════════════════════
--- MIGRAÇÃO: se você já rodou uma versão anterior deste schema.sql
--- (v2 inicial, com produtos.categoria como texto livre), este bloco
--- converte automaticamente para a nova estrutura com categoria_id,
--- sem perder os dados já cadastrados. É seguro rodar mesmo em banco
--- novo (não faz nada se as colunas já estiverem certas).
--- ═══════════════════════════════════════════════════════════
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name='produtos' AND column_name='categoria'
-  ) THEN
-    -- garante que categoria_id existe
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name='produtos' AND column_name='categoria_id'
-    ) THEN
-      ALTER TABLE produtos ADD COLUMN categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL;
-    END IF;
-
-    -- cria uma categoria para cada valor de texto distinto já usado
-    INSERT INTO categorias (nome)
-    SELECT DISTINCT categoria FROM produtos
-    WHERE categoria IS NOT NULL AND btrim(categoria) <> ''
-    ON CONFLICT (nome) DO NOTHING;
-
-    -- associa cada produto à categoria correspondente
-    UPDATE produtos p SET categoria_id = c.id
-    FROM categorias c
-    WHERE c.nome = p.categoria AND p.categoria_id IS NULL;
-
-    -- remove a coluna antiga de texto livre (dado já preservado em categoria_id)
-    ALTER TABLE produtos DROP COLUMN categoria;
-  END IF;
-END $$;
 
 -- ═══════════════════════════════════════════════════════════
 -- MIGRAÇÃO A PARTIR DA v1 (opcional)
