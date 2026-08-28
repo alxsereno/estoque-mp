@@ -115,8 +115,10 @@ tr:hover td{background:#fafaf7}
   #print-area{display:block!important}
   .no-print{display:none!important}
   body{background:#fff;font-size:12px}
+  @page{size:100mm 60mm;margin:0}
 }
 #print-area{display:none}
+.etiqueta-100x60{width:100mm;height:60mm;padding:4mm;box-sizing:border-box;font-family:sans-serif;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
 .modal-overlay{position:fixed;inset:0;background:rgba(20,20,18,.45);display:flex;align-items:center;justify-content:center;z-index:2000}
 .modal-box{background:#fff;border-radius:12px;padding:24px;width:520px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
@@ -238,8 +240,9 @@ tr:hover td{background:#fafaf7}
         </div>
         <div class="autocomplete" id="ent-autocomplete"></div>
       </div>
-      <div class="btn-row" style="justify-content:flex-start;margin-top:10px">
+      <div class="btn-row" style="justify-content:flex-start;margin-top:10px;flex-wrap:wrap">
         <button class="btn" onclick="abrirEntradaSemCodigo()">📋 Este produto não tem código de barras</button>
+        <button class="btn" onclick="abrirNovoProdutoRapido()">+ Cadastrar novo produto</button>
       </div>
       <div id="ent-resultado" style="margin-top:14px"></div>
     </div>
@@ -248,7 +251,10 @@ tr:hover td{background:#fafaf7}
       <div class="card-title" id="ent-produto-titulo">2. Fornecedor e nota fiscal</div>
       <div class="grid3">
         <div class="field"><label>Fornecedor</label>
-          <select id="ent-fornecedor"><option value="">Selecione...</option></select>
+          <div style="display:flex;gap:6px">
+            <select id="ent-fornecedor" style="flex:1"><option value="">Selecione...</option></select>
+            <button class="btn btn-sm" style="flex-shrink:0" onclick="abrirNovoFornecedorRapido()" title="Cadastrar novo fornecedor">+</button>
+          </div>
         </div>
         <div class="field"><label>Número da NF</label>
           <input type="text" id="ent-nf">
@@ -900,6 +906,7 @@ async function buscarCodigoEntrada(codigo){
         </div>
         <div class="btn-row" style="justify-content:flex-start">
           <button class="btn btn-sm btn-dark" onclick="confirmarAssociacaoProduto('${codigo}')">Associar e continuar</button>
+          <button class="btn btn-sm" onclick="abrirNovoProdutoRapido('${codigo}')">Produto ainda não existe? Cadastrar novo</button>
         </div>`;
     }
   }catch(e){ resDiv.innerHTML = `<p style="color:#c0392b">Erro: ${e.message}</p>`; }
@@ -955,6 +962,69 @@ function confirmarEntradaSemCodigo(){
   document.getElementById('ent-scan').value = '';
   document.getElementById('ent-resultado').innerHTML = `<div class="badge badge-gray">Sem código de barras: ${produto.descricao} — será oferecida etiqueta de lote</div>`;
   abrirFormEntrada(produto, null, null);
+}
+
+// ═══════════════════════ CADASTRO RÁPIDO (a partir da tela de Entrada) ═══════════════════════
+function abrirNovoProdutoRapido(codigoBarrasPendente){
+  abrirModal('Cadastrar novo produto', `
+    <div class="grid2" style="margin-bottom:12px">
+      <div class="field"><label>Código interno*</label><input id="modal-rap-codigo" placeholder="Ex: 001"></div>
+      <div class="field"><label>Unidade base*</label><select id="modal-rap-unidade">${unidades.map(u=>`<option value="${u.sigla}">${u.sigla} — ${u.nome}</option>`).join('')}</select></div>
+    </div>
+    <div class="field" style="margin-bottom:12px"><label>Descrição*</label><input id="modal-rap-descricao" placeholder="Ex: Feijão Carioca"></div>
+    <div class="field" style="margin-bottom:16px"><label>Categoria</label>
+      <select id="modal-rap-categoria"><option value="">Sem categoria</option>${categorias.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarNovoProdutoRapido(${codigoBarrasPendente ? `'${codigoBarrasPendente}'` : 'null'})">Cadastrar e continuar</button>
+    </div>
+  `);
+}
+async function salvarNovoProdutoRapido(codigoBarrasPendente){
+  const codigo = document.getElementById('modal-rap-codigo').value.trim();
+  const descricao = document.getElementById('modal-rap-descricao').value.trim();
+  const categoria_id = document.getElementById('modal-rap-categoria').value || null;
+  const unidade = document.getElementById('modal-rap-unidade').value;
+  if(!codigo || !descricao){ toast('Código e descrição são obrigatórios'); return; }
+  try{
+    const r = await api('/api/produtos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({codigo,descricao,categoria_id,unidade}) });
+    produtos.push(r.produto);
+    toast('✓ Produto cadastrado');
+    fecharModal();
+    document.getElementById('ent-scan').value = descricao;
+    document.getElementById('ent-resultado').innerHTML = `<div class="badge badge-ok">✓ Produto cadastrado: ${descricao}</div>`;
+    abrirFormEntrada(r.produto, null, codigoBarrasPendente || null);
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+function abrirNovoFornecedorRapido(){
+  abrirModal('Cadastrar novo fornecedor', `
+    <div class="field" style="margin-bottom:12px"><label>Nome*</label><input id="modal-rap-forn-nome" placeholder="Ex: Tauste Supermercados"></div>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="field"><label>CNPJ</label><input id="modal-rap-forn-cnpj"></div>
+      <div class="field"><label>Telefone</label><input id="modal-rap-forn-telefone"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarNovoFornecedorRapido()">Cadastrar</button>
+    </div>
+  `);
+}
+async function salvarNovoFornecedorRapido(){
+  const nome = document.getElementById('modal-rap-forn-nome').value.trim();
+  const cnpj = document.getElementById('modal-rap-forn-cnpj').value.trim();
+  const telefone = document.getElementById('modal-rap-forn-telefone').value.trim();
+  if(!nome){ toast('Nome é obrigatório'); return; }
+  try{
+    const r = await api('/api/fornecedores', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({nome,cnpj,telefone}) });
+    fornecedores.push(r.fornecedor);
+    const sel = document.getElementById('ent-fornecedor');
+    sel.innerHTML = '<option value="">Selecione...</option>' + fornecedores.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('');
+    sel.value = r.fornecedor.id;
+    toast('✓ Fornecedor cadastrado');
+    fecharModal();
+  }catch(e){ toast('Erro: '+e.message); }
 }
 
 function preencherSelectUnidade(selectEl, valorAtual){
@@ -1108,13 +1178,13 @@ async function imprimirEtiquetaLote(){
   if(!lote) return;
   const area = document.getElementById('print-area');
   area.innerHTML = `
-    <div style="width:100mm;padding:6mm;font-family:sans-serif">
+    <div class="etiqueta-100x60">
       <div style="font-size:13px;font-weight:700">${entradaAtual.produto.descricao}</div>
       <div style="font-size:10px;color:#555;margin-bottom:4px">Lote: ${lote.codigo_lote}</div>
       <svg id="etq-barcode"></svg>
       <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtNum(lote.quantidade_total)} ${lote.unidade}</div>
     </div>`;
-  JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:50, fontSize:12 });
+  JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:42, fontSize:12 });
   await api(`/api/lotes/${lote.id}/etiqueta-impressa`, { method:'PATCH' });
   window.print();
   fecharEtiquetaCard();
@@ -1338,13 +1408,13 @@ function renderEstoque(){
 async function reimprimirEtiqueta(lote){
   const area = document.getElementById('print-area');
   area.innerHTML = `
-    <div style="width:100mm;padding:6mm;font-family:sans-serif">
+    <div class="etiqueta-100x60">
       <div style="font-size:13px;font-weight:700">${lote.produto_descricao}</div>
       <div style="font-size:10px;color:#555;margin-bottom:4px">Lote: ${lote.codigo_lote}</div>
       <svg id="etq-barcode"></svg>
       <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtNum(lote.quantidade_atual)} ${lote.unidade}</div>
     </div>`;
-  JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:50, fontSize:12 });
+  JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:42, fontSize:12 });
   window.print();
 }
 

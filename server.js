@@ -135,7 +135,7 @@ app.get('/api/produtos', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/produtos', requireAdmin, async (req, res) => {
+app.post('/api/produtos', async (req, res) => {
   const { codigo, descricao, categoria_id, unidade, estoque_minimo } = req.body;
   if(!codigo || !descricao){
     return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
@@ -242,7 +242,7 @@ app.get('/api/fornecedores', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/fornecedores', requireAdmin, async (req, res) => {
+app.post('/api/fornecedores', async (req, res) => {
   const { nome, razao, cnpj, telefone, email, contato, obs } = req.body;
   if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
   try {
