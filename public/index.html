@@ -17,7 +17,12 @@ body{font-family:system-ui,sans-serif;background:#faf9f6;color:#1a1a18;font-size
 .topbar-title{font-size:14px;font-weight:700;line-height:1.3}
 .topbar-title span{display:block;font-size:11px;font-weight:400;color:#888;margin-top:1px}
 .app-body{display:flex;flex:1;min-height:0}
-.sidebar{width:210px;min-width:210px;background:#fff;border-right:1px solid #e5e5e0;display:flex;flex-direction:column}
+.sidebar{width:210px;min-width:210px;background:#fff;border-right:1px solid #e5e5e0;display:flex;flex-direction:column;transition:width .15s,min-width .15s}
+.sidebar.collapsed{width:56px;min-width:56px}
+.sidebar.collapsed .nav-label,.sidebar.collapsed .nav-group-label{display:none}
+.sidebar.collapsed .nav-item{justify-content:center;padding:10px 0}
+.collapse-btn{background:none;border:none;cursor:pointer;color:#888;padding:6px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.collapse-btn:hover{background:#f5f5f2;color:#1a1a18}
 nav{flex:1;padding:12px 10px;overflow-y:auto}
 .nav-group-label{font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.06em;padding:10px 10px 6px}
 .nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;cursor:pointer;font-size:13px;color:#555;border-radius:8px;transition:all .15s;margin-bottom:2px}
@@ -180,6 +185,7 @@ tr:hover td{background:#fafaf7}
 <div class="app" id="app-shell" style="display:none">
 <header class="topbar no-print">
   <div class="topbar-left">
+    <button class="collapse-btn" title="Recolher/expandir menu" onclick="toggleSidebar()" aria-label="Recolher menu">☰</button>
     <div class="topbar-icon">📦</div>
     <div class="topbar-title">Estoque MP<span>Simples e Natural</span></div>
   </div>
@@ -605,6 +611,7 @@ async function entrarNoApp(){
   document.getElementById('topbar-user-role').textContent = sessaoUsuario.role === 'admin' ? 'Admin' : 'Operador';
   document.getElementById('topbar-avatar').textContent = sessaoUsuario.nome.slice(0,2).toUpperCase();
   initNav();
+  initSidebarState();
   try{ await carregarBase(); }catch(e){ console.error(e); }
   showScreen('dashboard');
 }
@@ -628,9 +635,9 @@ function svgIcon(name){
 
 const SCREENS = [
   {id:'dashboard', icon:'home', label:'Início', grupo:'Visão geral'},
-  {id:'produtos', icon:'scale', label:'Produtos', grupo:'Cadastros'},
-  {id:'fornecedores', icon:'truck', label:'Fornecedores', grupo:'Cadastros'},
-  {id:'config', icon:'gear', label:'Configurações', grupo:'Cadastros'},
+  {id:'produtos', icon:'scale', label:'Produtos', grupo:'Cadastros', adminOnly:true},
+  {id:'fornecedores', icon:'truck', label:'Fornecedores', grupo:'Cadastros', adminOnly:true},
+  {id:'config', icon:'gear', label:'Configurações', grupo:'Cadastros', adminOnly:true},
   {id:'usuarios', icon:'users', label:'Usuários', grupo:'Cadastros', adminOnly:true},
   {id:'entrada', icon:'entrada', label:'Entrada', grupo:'Operação'},
   {id:'saida', icon:'saida', label:'Saída', grupo:'Operação'},
@@ -646,8 +653,18 @@ function initNav(){
   const grupos = [...new Set(visiveis.map(s=>s.grupo))];
   nav.innerHTML = grupos.map(g => `
     <div class="nav-group-label">${g}</div>
-    ${visiveis.filter(s=>s.grupo===g).map(s => `<div class="nav-item" data-screen="${s.id}" onclick="showScreen('${s.id}')">${svgIcon(s.icon)}${s.label}</div>`).join('')}
+    ${visiveis.filter(s=>s.grupo===g).map(s => `<div class="nav-item" data-screen="${s.id}" title="${s.label}" onclick="showScreen('${s.id}')">${svgIcon(s.icon)}<span class="nav-label">${s.label}</span></div>`).join('')}
   `).join('');
+}
+
+function toggleSidebar(){
+  const collapsed = document.querySelector('.sidebar').classList.toggle('collapsed');
+  localStorage.setItem('estoquemp_sidebar_collapsed', collapsed ? '1' : '0');
+}
+function initSidebarState(){
+  const salvo = localStorage.getItem('estoquemp_sidebar_collapsed');
+  const deveColapsar = salvo !== null ? salvo === '1' : window.innerWidth <= 900;
+  document.querySelector('.sidebar').classList.toggle('collapsed', deveColapsar);
 }
 
 const CARREGADORES = {
@@ -873,11 +890,13 @@ async function buscarCodigoEntrada(codigo){
       abrirFormEntrada(produto, data, codigo);
       resDiv.innerHTML = `<div class="badge badge-ok">✓ Código reconhecido: ${produto.descricao} (${data.descricao_embalagem||data.unidade_compra})</div>`;
     } else {
+      produtoAssociarSelecionado = null;
       resDiv.innerHTML = `
         <div class="warn-box">Código <strong>${codigo}</strong> não associado a nenhum produto ainda.</div>
-        <div class="field" style="margin-top:10px">
+        <div class="field" style="margin-top:10px;position:relative">
           <label>Selecione o produto correspondente</label>
-          <select id="ent-select-produto"><option value="">Selecione...</option>${produtos.map(p=>`<option value="${p.id}">${p.codigo} — ${p.descricao}</option>`).join('')}</select>
+          <input type="text" id="ent-select-produto-busca" placeholder="Digite para buscar..." autocomplete="off" oninput="buscarProdutoParaAssociar(this.value)">
+          <div class="autocomplete" id="ent-select-produto-autocomplete"></div>
         </div>
         <div class="btn-row" style="justify-content:flex-start">
           <button class="btn btn-sm btn-dark" onclick="confirmarAssociacaoProduto('${codigo}')">Associar e continuar</button>
@@ -886,11 +905,33 @@ async function buscarCodigoEntrada(codigo){
   }catch(e){ resDiv.innerHTML = `<p style="color:#c0392b">Erro: ${e.message}</p>`; }
 }
 
+let produtoAssociarSelecionado = null;
+function buscarProdutoParaAssociar(q){
+  const dd = document.getElementById('ent-select-produto-autocomplete');
+  produtoAssociarSelecionado = null;
+  q = q.trim();
+  if(!q || q.length < 2){ dd.style.display = 'none'; return; }
+  const ql = q.toLowerCase();
+  const achados = produtos.filter(p => p.codigo.toLowerCase().includes(ql) || p.descricao.toLowerCase().includes(ql)).slice(0,8);
+  if(achados.length === 0){ dd.style.display = 'none'; return; }
+  dd.innerHTML = achados.map(p => `<div class="ac-item" onclick="selecionarProdutoParaAssociar(${p.id},'${p.descricao.replace(/'/g,"\\'")}')">${p.descricao}<span class="ac-cod">${p.codigo}${p.categoria?' · '+p.categoria:''}</span></div>`).join('');
+  dd.style.display = 'block';
+}
+function selecionarProdutoParaAssociar(id, descricao){
+  produtoAssociarSelecionado = id;
+  document.getElementById('ent-select-produto-busca').value = descricao;
+  document.getElementById('ent-select-produto-autocomplete').style.display = 'none';
+}
+document.addEventListener('click', e => {
+  if(!e.target.closest('#ent-select-produto-busca') && !e.target.closest('#ent-select-produto-autocomplete')){
+    const dd = document.getElementById('ent-select-produto-autocomplete');
+    if(dd) dd.style.display = 'none';
+  }
+});
+
 function confirmarAssociacaoProduto(codigo){
-  const sel = document.getElementById('ent-select-produto');
-  const produtoId = sel.value;
-  if(!produtoId){ toast('Selecione um produto'); return; }
-  const produto = produtos.find(p => p.id == produtoId);
+  if(!produtoAssociarSelecionado){ toast('Selecione um produto na lista'); return; }
+  const produto = produtos.find(p => p.id == produtoAssociarSelecionado);
   abrirFormEntrada(produto, null, codigo);
 }
 
@@ -1353,11 +1394,65 @@ function editarProduto(id){
     <div class="field" style="margin-bottom:16px"><label>Unidade base</label>
       <select id="modal-p-unidade">${unidades.map(u=>`<option value="${u.sigla}" ${u.sigla===p.unidade?'selected':''}>${u.sigla} — ${u.nome}</option>`).join('')}</select>
     </div>
-    <div class="btn-row">
-      <button class="btn" onclick="fecharModal()">Cancelar</button>
+    <div class="btn-row" style="justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-dark" onclick="salvarEdicaoProduto(${p.id})">Salvar alterações</button>
     </div>
+
+    <div style="border-top:1px solid #eee;padding-top:14px">
+      <label style="display:block;margin-bottom:8px">Códigos de barras associados</label>
+      <div id="modal-p-codigos-lista"></div>
+      <div class="grid2" style="margin-top:10px">
+        <input id="modal-novo-codigo-barras" placeholder="Código de barras">
+        <input id="modal-novo-codigo-desc" placeholder="Descrição (ex: Pacote 5kg)">
+      </div>
+      <div class="grid2" style="margin-top:8px">
+        <select id="modal-novo-codigo-unidade">${unidades.map(u=>`<option value="${u.sigla}">${u.sigla} — ${u.nome}</option>`).join('')}</select>
+        <input id="modal-novo-codigo-fator" type="number" step="0.0001" placeholder="Fator (ex: 5)">
+      </div>
+      <div class="btn-row" style="justify-content:flex-start;margin-top:8px">
+        <button class="btn btn-sm btn-dark" onclick="adicionarCodigoNoModal(${p.id})">+ Adicionar código</button>
+      </div>
+    </div>
+
+    <div class="btn-row"><button class="btn" onclick="fecharModal()">Fechar</button></div>
   `);
+  renderCodigosNoModal(p.id);
+}
+async function renderCodigosNoModal(produtoId){
+  const el = document.getElementById('modal-p-codigos-lista');
+  if(!el) return;
+  el.innerHTML = '<p style="color:#aaa;font-size:12px">Carregando...</p>';
+  try{
+    const codigos = await api(`/api/produtos/${produtoId}/codigos`);
+    el.innerHTML = codigos.length ? codigos.map(c => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border:1px solid #eee;border-radius:7px;margin-bottom:6px;font-size:12px">
+        <div><strong>${c.codigo_barras||'(sem código)'}</strong> — ${c.descricao_embalagem||c.unidade_compra} (fator ${c.fator_conversao})</div>
+        <button class="btn-icon" title="Remover" onclick="removerCodigoNoModal(${c.id},${produtoId})">⊘</button>
+      </div>`).join('') : '<p style="color:#aaa;font-size:12px">Nenhum código associado ainda</p>';
+    const p = produtosCache.find(x => x.id === produtoId);
+    if(p) p.codigos = codigos;
+  }catch(e){ el.innerHTML = `<p style="color:#c0392b;font-size:12px">Erro: ${e.message}</p>`; }
+}
+async function adicionarCodigoNoModal(produtoId){
+  const codigo_barras = document.getElementById('modal-novo-codigo-barras').value.trim();
+  const descricao_embalagem = document.getElementById('modal-novo-codigo-desc').value.trim();
+  const unidade_compra = document.getElementById('modal-novo-codigo-unidade').value;
+  const fator_conversao = document.getElementById('modal-novo-codigo-fator').value;
+  if(!codigo_barras || !fator_conversao){ toast('Código de barras e fator de conversão são obrigatórios'); return; }
+  try{
+    await api('/api/codigos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ codigo_barras, produto_id: produtoId, descricao_embalagem, unidade_compra, fator_conversao }) });
+    toast('✓ Código associado');
+    ['modal-novo-codigo-barras','modal-novo-codigo-desc','modal-novo-codigo-fator'].forEach(id=>document.getElementById(id).value='');
+    renderCodigosNoModal(produtoId);
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function removerCodigoNoModal(codigoId, produtoId){
+  if(!confirm('Remover este código de barras do produto?')) return;
+  try{
+    await api(`/api/codigos/${codigoId}`, { method:'DELETE' });
+    toast('✓ Código removido');
+    renderCodigosNoModal(produtoId);
+  }catch(e){ toast('Erro: '+e.message); }
 }
 async function salvarEdicaoProduto(id){
   const descricao = document.getElementById('modal-p-descricao').value.trim();
@@ -1367,7 +1462,6 @@ async function salvarEdicaoProduto(id){
   try{
     await api(`/api/produtos/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({descricao,categoria_id,unidade}) });
     toast('✓ Produto atualizado');
-    fecharModal();
     carregarProdutos();
   }catch(e){ toast('Erro: '+e.message); }
 }

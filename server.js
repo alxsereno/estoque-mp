@@ -333,6 +333,13 @@ app.post('/api/codigos', async (req, res) => {
   }
 });
 
+app.delete('/api/codigos/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM produto_codigos WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════
 // LOTES (entrada de matéria-prima = 1 lote)
 // ═══════════════════════════════════════════════════════════
