@@ -136,15 +136,15 @@ app.get('/api/produtos', async (req, res) => {
 });
 
 app.post('/api/produtos', async (req, res) => {
-  const { codigo, descricao, categoria_id, unidade, estoque_minimo } = req.body;
+  const { codigo, descricao, categoria_id, unidade, estoque_minimo, estoque_maximo } = req.body;
   if(!codigo || !descricao){
     return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO produtos (codigo, descricao, categoria_id, unidade, estoque_minimo, origem)
-       VALUES ($1,$2,$3,$4,$5,'manual') RETURNING *`,
-      [codigo, descricao, categoria_id || null, unidade || 'kg', estoque_minimo || null]
+      `INSERT INTO produtos (codigo, descricao, categoria_id, unidade, estoque_minimo, estoque_maximo, origem)
+       VALUES ($1,$2,$3,$4,$5,$6,'manual') RETURNING *`,
+      [codigo, descricao, categoria_id || null, unidade || 'kg', estoque_minimo || null, estoque_maximo || null]
     );
     res.json({ ok: true, produto: rows[0] });
   } catch(e){
@@ -154,12 +154,12 @@ app.post('/api/produtos', async (req, res) => {
 });
 
 app.put('/api/produtos/:id', requireAdmin, async (req, res) => {
-  const { descricao, categoria_id, unidade, estoque_minimo } = req.body;
+  const { descricao, categoria_id, unidade, estoque_minimo, estoque_maximo } = req.body;
   try {
     const { rows } = await pool.query(
-      `UPDATE produtos SET descricao=$1, categoria_id=$2, unidade=$3, estoque_minimo=$4
-       WHERE id=$5 RETURNING *`,
-      [descricao, categoria_id || null, unidade, estoque_minimo, req.params.id]
+      `UPDATE produtos SET descricao=$1, categoria_id=$2, unidade=$3, estoque_minimo=$4, estoque_maximo=$5
+       WHERE id=$6 RETURNING *`,
+      [descricao, categoria_id || null, unidade, estoque_minimo || null, estoque_maximo || null, req.params.id]
     );
     res.json({ ok: true, produto: rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }

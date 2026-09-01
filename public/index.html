@@ -6,6 +6,7 @@
 <title>Estoque MP</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--brand:#1e7e34;--brand-dark:#166b2b;--brand-soft:#e6f4ea;}
@@ -115,10 +116,10 @@ tr:hover td{background:#fafaf7}
   #print-area{display:block!important}
   .no-print{display:none!important}
   body{background:#fff;font-size:12px}
-  @page{size:100mm 60mm;margin:0}
+  @page etiqueta{size:100mm 60mm;margin:0}
 }
 #print-area{display:none}
-.etiqueta-100x60{width:100mm;height:60mm;padding:4mm;box-sizing:border-box;font-family:sans-serif;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
+.etiqueta-100x60{width:100mm;height:60mm;padding:4mm;box-sizing:border-box;font-family:sans-serif;overflow:hidden;display:flex;flex-direction:column;justify-content:center;page:etiqueta}
 .modal-overlay{position:fixed;inset:0;background:rgba(20,20,18,.45);display:flex;align-items:center;justify-content:center;z-index:2000}
 .modal-box{background:#fff;border-radius:12px;padding:24px;width:520px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
@@ -129,6 +130,13 @@ tr:hover td{background:#fafaf7}
 .view-toggle button{padding:7px 14px;font-size:12px;border:none;background:#fff;cursor:pointer;color:#666}
 .view-toggle button.active{background:#1a1a18;color:#fff}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+.quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.quick-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:26px 16px;border-radius:14px;border:none;cursor:pointer;font-size:17px;font-weight:600;color:#fff;min-height:96px;transition:opacity .15s}
+.quick-btn:active{opacity:.85}
+.quick-icon{width:30px;height:30px}
+.quick-icon svg{width:100%;height:100%}
+.quick-entrada{background:var(--brand)}
+.quick-saida{background:#1a56db}
 .avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-soft);color:var(--brand-dark);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
 .topbar-right{display:flex;align-items:center;gap:10px}
 .topbar-user{text-align:right;font-size:12px;line-height:1.3}
@@ -207,6 +215,16 @@ tr:hover td{background:#fafaf7}
   <section class="screen" id="s-dashboard">
     <h1>Dashboard</h1>
     <p class="sub">Visão geral do estoque de matéria-prima</p>
+    <div class="quick-actions">
+      <button class="quick-btn quick-entrada" onclick="showScreen('entrada')">
+        <span class="quick-icon">📥</span>
+        <span>Entrada</span>
+      </button>
+      <button class="quick-btn quick-saida" onclick="showScreen('saida')">
+        <span class="quick-icon">📤</span>
+        <span>Saída</span>
+      </button>
+    </div>
     <div class="grid4" style="margin-bottom:16px">
       <div class="metric"><div class="metric-lbl">Valor total em estoque</div><div class="metric-val" id="d-valor-total">—</div></div>
       <div class="metric"><div class="metric-lbl">Baixas hoje (valor)</div><div class="metric-val" id="d-baixas-valor">—</div><div class="metric-sub" id="d-baixas-sub"></div></div>
@@ -363,13 +381,15 @@ tr:hover td{background:#fafaf7}
     <div class="filter-row">
       <input type="text" id="est-busca" placeholder="Buscar produto..." oninput="renderEstoque()">
       <select id="est-categoria" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
+      <button class="btn" onclick="exportarEstoqueExcel()">📊 Exportar Excel</button>
+      <button class="btn" onclick="exportarEstoquePDF()">🖨️ Gerar PDF</button>
     </div>
     <div class="card" id="est-card-lote"><table>
       <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. atual</th><th>Validade</th><th>Status</th><th>Fornecedor</th><th>Etiqueta</th><th></th></tr></thead>
       <tbody id="est-tbody"></tbody>
     </table></div>
     <div class="card" id="est-card-produto" style="display:none"><table>
-      <thead><tr><th>Produto</th><th>Categoria</th><th>Qtd. total</th><th>Pacotes</th><th>Status</th><th>Valor total</th><th>Valor unitário</th></tr></thead>
+      <thead><tr><th>Produto</th><th>Categoria</th><th>Qtd. total</th><th>Pacotes</th><th>Validade</th><th>Estoque</th><th>Valor total</th><th>Valor unitário</th></tr></thead>
       <tbody id="est-produto-tbody"></tbody>
     </table></div>
   </section>
@@ -388,6 +408,12 @@ tr:hover td{background:#fafaf7}
         </div>
         <div class="field"><label>Unidade base</label>
           <select id="p-unidade"></select>
+        </div>
+        <div class="field"><label>Estoque mínimo</label>
+          <input type="number" id="p-estoque-min" step="0.0001" placeholder="Opcional">
+        </div>
+        <div class="field"><label>Estoque máximo</label>
+          <input type="number" id="p-estoque-max" step="0.0001" placeholder="Opcional">
         </div>
       </div>
       <div class="btn-row">
@@ -1336,6 +1362,15 @@ function statusValidade(dataValidade){
   if(dias <= configValidade.atencao) return { label: 'Atenção', cls: 'badge-warn', dot: '#b8860b' };
   return { label: 'Ok', cls: 'badge-ok', dot: '#1e7e34' };
 }
+function statusEstoque(produtoId, qtdAtual){
+  const p = produtos.find(x => x.id === produtoId);
+  const min = p && p.estoque_minimo != null ? parseFloat(p.estoque_minimo) : null;
+  const max = p && p.estoque_maximo != null ? parseFloat(p.estoque_maximo) : null;
+  if(min == null && max == null) return { label: '—', cls: 'badge-gray', dot: '#ccc' };
+  if(min != null && qtdAtual < min) return { label: 'Baixo', cls: 'badge-danger', dot: '#c0392b' };
+  if(max != null && qtdAtual > max) return { label: 'Excesso', cls: 'badge-info', dot: '#1a56db' };
+  return { label: 'Ok', cls: 'badge-ok', dot: '#1e7e34' };
+}
 async function carregarEstoque(){
   try{ const cfg = await api('/api/config'); if(cfg.validade) configValidade = cfg.validade; }catch{}
   lotesCache = await api('/api/lotes?disponivel=1');
@@ -1351,13 +1386,38 @@ function mudarVisaoEstoque(v){
   document.getElementById('est-card-produto').style.display = v==='produto' ? 'block' : 'none';
   renderEstoque();
 }
-function renderEstoque(){
+function estoqueFiltrado(){
   const busca = (document.getElementById('est-busca').value||'').toLowerCase();
   const cat = document.getElementById('est-categoria').value;
-  const filtrado = lotesCache.filter(l =>
+  return lotesCache.filter(l =>
     (!busca || l.produto_descricao.toLowerCase().includes(busca)) &&
     (!cat || l.categoria === cat)
   );
+}
+function estoqueAgrupadoPorProduto(filtrado){
+  const grupos = {};
+  filtrado.forEach(l => {
+    const key = l.produto_id;
+    if(!grupos[key]) grupos[key] = { produto_id: l.produto_id, produto_descricao: l.produto_descricao, categoria: l.categoria, unidade: l.unidade, qtd: 0, nLotes: 0, valor: 0, piorStatus: null, piorRank: -1, pacotes: {} };
+    const st = statusValidade(l.data_validade);
+    const rank = { 'Ok':0, 'Sem validade':0, 'Atenção':1, 'Crítico':2, 'Vencido':3 }[st.label];
+    grupos[key].qtd += parseFloat(l.quantidade_atual);
+    grupos[key].nLotes += 1;
+    grupos[key].valor += parseFloat(l.quantidade_atual) * (parseFloat(l.preco_unitario)||0);
+    if(rank > grupos[key].piorRank){ grupos[key].piorRank = rank; grupos[key].piorStatus = st; }
+    if(l.quantidade_comprada && l.unidade_compra){
+      grupos[key].pacotes[l.unidade_compra] = (grupos[key].pacotes[l.unidade_compra]||0) + parseFloat(l.quantidade_comprada);
+    }
+  });
+  return Object.values(grupos).map(g => ({
+    ...g,
+    pacotesTxt: Object.entries(g.pacotes).map(([un,qtd]) => `${fmtNum(qtd)} ${un}`).join(', ') || '—',
+    valorUnitario: g.qtd > 0 ? (g.valor / g.qtd) : 0,
+    statusEstoque: statusEstoque(g.produto_id, g.qtd)
+  }));
+}
+function renderEstoque(){
+  const filtrado = estoqueFiltrado();
 
   if(estoqueVisao === 'lote'){
     document.getElementById('est-tbody').innerHTML = filtrado.map(l => {
@@ -1375,35 +1435,71 @@ function renderEstoque(){
     </tr>`;
     }).join('') || '<tr><td colspan="9" style="color:#aaa;text-align:center;padding:24px">Nenhum lote encontrado</td></tr>';
   } else {
-    const grupos = {};
-    filtrado.forEach(l => {
-      const key = l.produto_id;
-      if(!grupos[key]) grupos[key] = { produto_descricao: l.produto_descricao, categoria: l.categoria, unidade: l.unidade, qtd: 0, nLotes: 0, valor: 0, piorStatus: null, piorRank: -1, pacotes: {} };
-      const st = statusValidade(l.data_validade);
-      const rank = { 'Ok':0, 'Sem validade':0, 'Atenção':1, 'Crítico':2, 'Vencido':3 }[st.label];
-      grupos[key].qtd += parseFloat(l.quantidade_atual);
-      grupos[key].nLotes += 1;
-      grupos[key].valor += parseFloat(l.quantidade_atual) * (parseFloat(l.preco_unitario)||0);
-      if(rank > grupos[key].piorRank){ grupos[key].piorRank = rank; grupos[key].piorStatus = st; }
-      if(l.quantidade_comprada && l.unidade_compra){
-        grupos[key].pacotes[l.unidade_compra] = (grupos[key].pacotes[l.unidade_compra]||0) + parseFloat(l.quantidade_comprada);
-      }
-    });
-    const linhas = Object.values(grupos);
-    document.getElementById('est-produto-tbody').innerHTML = linhas.map(g => {
-      const pacotesTxt = Object.entries(g.pacotes).map(([un,qtd]) => `${fmtNum(qtd)} ${un}`).join(', ') || '—';
-      const valorUnitario = g.qtd > 0 ? (g.valor / g.qtd) : 0;
-      return `<tr>
+    const linhas = estoqueAgrupadoPorProduto(filtrado);
+    document.getElementById('est-produto-tbody').innerHTML = linhas.map(g => `<tr>
         <td>${g.produto_descricao}</td>
         <td>${catBadge(g.categoria)}</td>
         <td>${fmtNum(g.qtd)} ${g.unidade}</td>
-        <td>${pacotesTxt}</td>
+        <td>${g.pacotesTxt}</td>
         <td><span class="badge ${g.piorStatus.cls}"><span class="status-dot" style="background:${g.piorStatus.dot}"></span>${g.piorStatus.label}</span></td>
+        <td><span class="badge ${g.statusEstoque.cls}"><span class="status-dot" style="background:${g.statusEstoque.dot}"></span>${g.statusEstoque.label}</span></td>
         <td>${fmtMoeda(g.valor)}</td>
-        <td>${fmtMoeda(valorUnitario)} / ${g.unidade}</td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum produto em estoque</td></tr>';
+        <td>${fmtMoeda(g.valorUnitario)} / ${g.unidade}</td>
+      </tr>`).join('') || '<tr><td colspan="8" style="color:#aaa;text-align:center;padding:24px">Nenhum produto em estoque</td></tr>';
   }
+}
+
+// ═══════════════════════ EXPORTAÇÃO (Excel / PDF) ═══════════════════════
+function exportarEstoqueExcel(){
+  if(typeof XLSX === 'undefined'){ toast('Biblioteca de Excel não carregou — verifique a conexão'); return; }
+  const filtrado = estoqueFiltrado();
+  let linhas, headers;
+  if(estoqueVisao === 'lote'){
+    headers = ['Lote','Produto','Categoria','Qtd. atual','Unidade','Validade','Status validade','Fornecedor'];
+    linhas = filtrado.map(l => [
+      l.codigo_lote, l.produto_descricao, l.categoria||'', parseFloat(l.quantidade_atual), l.unidade,
+      l.data_validade||'', statusValidade(l.data_validade).label, l.fornecedor_nome||''
+    ]);
+  } else {
+    const agrupado = estoqueAgrupadoPorProduto(filtrado);
+    headers = ['Produto','Categoria','Qtd. total','Unidade','Pacotes','Status validade','Status estoque','Valor total (R$)','Valor unitário (R$)'];
+    linhas = agrupado.map(g => [
+      g.produto_descricao, g.categoria||'', g.qtd, g.unidade, g.pacotesTxt,
+      g.piorStatus.label, g.statusEstoque.label, Number(g.valor.toFixed(2)), Number(g.valorUnitario.toFixed(2))
+    ]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...linhas]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Estoque');
+  const dataHoje = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `estoque-${estoqueVisao}-${dataHoje}.xlsx`);
+}
+
+function exportarEstoquePDF(){
+  const filtrado = estoqueFiltrado();
+  const dataHoje = new Date().toLocaleDateString('pt-BR');
+  const area = document.getElementById('print-area');
+  let tabelaHtml;
+  if(estoqueVisao === 'lote'){
+    tabelaHtml = `<table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr>${['Lote','Produto','Categoria','Qtd. atual','Validade','Status','Fornecedor'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
+      <tbody>${filtrado.map(l => {
+        const st = statusValidade(l.data_validade);
+        return `<tr>${[l.codigo_lote, l.produto_descricao, l.categoria||'—', fmtNum(l.quantidade_atual)+' '+l.unidade, fmtData(l.data_validade), st.label, l.fornecedor_nome||'—'].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`;
+      }).join('')}</tbody></table>`;
+  } else {
+    const agrupado = estoqueAgrupadoPorProduto(filtrado);
+    tabelaHtml = `<table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr>${['Produto','Categoria','Qtd. total','Pacotes','Validade','Estoque','Valor total','Valor unitário'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
+      <tbody>${agrupado.map(g => `<tr>${[g.produto_descricao, g.categoria||'—', fmtNum(g.qtd)+' '+g.unidade, g.pacotesTxt, g.piorStatus.label, g.statusEstoque.label, fmtMoeda(g.valor), fmtMoeda(g.valorUnitario)+'/'+g.unidade].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  }
+  area.innerHTML = `
+    <div style="padding:12mm;font-family:sans-serif">
+      <h2 style="margin-bottom:2px">Relatório de Estoque — ${estoqueVisao === 'lote' ? 'Por lote' : 'Agrupado por produto'}</h2>
+      <p style="color:#666;font-size:12px;margin-bottom:14px">Gerado em ${dataHoje}</p>
+      ${tabelaHtml}
+    </div>`;
+  window.print();
 }
 async function reimprimirEtiqueta(lote){
   const area = document.getElementById('print-area');
@@ -1463,6 +1559,10 @@ function editarProduto(id){
     </div>
     <div class="field" style="margin-bottom:16px"><label>Unidade base</label>
       <select id="modal-p-unidade">${unidades.map(u=>`<option value="${u.sigla}" ${u.sigla===p.unidade?'selected':''}>${u.sigla} — ${u.nome}</option>`).join('')}</select>
+    </div>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="field"><label>Estoque mínimo</label><input type="number" id="modal-p-estoque-min" step="0.0001" value="${p.estoque_minimo != null ? p.estoque_minimo : ''}"></div>
+      <div class="field"><label>Estoque máximo</label><input type="number" id="modal-p-estoque-max" step="0.0001" value="${p.estoque_maximo != null ? p.estoque_maximo : ''}"></div>
     </div>
     <div class="btn-row" style="justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-dark" onclick="salvarEdicaoProduto(${p.id})">Salvar alterações</button>
@@ -1528,9 +1628,11 @@ async function salvarEdicaoProduto(id){
   const descricao = document.getElementById('modal-p-descricao').value.trim();
   const categoria_id = document.getElementById('modal-p-categoria').value || null;
   const unidade = document.getElementById('modal-p-unidade').value;
+  const estoque_minimo = document.getElementById('modal-p-estoque-min').value || null;
+  const estoque_maximo = document.getElementById('modal-p-estoque-max').value || null;
   if(!descricao){ toast('Descrição é obrigatória'); return; }
   try{
-    await api(`/api/produtos/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({descricao,categoria_id,unidade}) });
+    await api(`/api/produtos/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({descricao,categoria_id,unidade,estoque_minimo,estoque_maximo}) });
     toast('✓ Produto atualizado');
     carregarProdutos();
   }catch(e){ toast('Erro: '+e.message); }
@@ -1548,11 +1650,13 @@ async function criarProduto(){
   const descricao = document.getElementById('p-descricao').value.trim();
   const categoria_id = document.getElementById('p-categoria').value || null;
   const unidade = document.getElementById('p-unidade').value;
+  const estoque_minimo = document.getElementById('p-estoque-min').value || null;
+  const estoque_maximo = document.getElementById('p-estoque-max').value || null;
   if(!codigo || !descricao){ toast('Código e descrição são obrigatórios'); return; }
   try{
-    await api('/api/produtos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({codigo,descricao,categoria_id,unidade}) });
+    await api('/api/produtos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({codigo,descricao,categoria_id,unidade,estoque_minimo,estoque_maximo}) });
     toast('✓ Produto criado');
-    ['p-codigo','p-descricao'].forEach(id=>document.getElementById(id).value='');
+    ['p-codigo','p-descricao','p-estoque-min','p-estoque-max'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('p-categoria').value='';
     carregarProdutos();
   }catch(e){ toast('Erro: '+e.message); }
