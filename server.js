@@ -67,6 +67,16 @@ function requireAdmin(req, res, next){
   }
   next();
 }
+// Admin ou Planejador: gerenciam cadastros de apoio (categorias, unidades,
+// parâmetros, pedidos de compra) — Planejador tem acesso total, só não
+// gerencia usuários (isso continua exclusivo do requireAdmin acima).
+function requireGestor(req, res, next){
+  if(!req.usuario || !['admin','planejador'].includes(req.usuario.role)){
+    return res.status(403).json({ error: 'Apenas admin ou planejador podem fazer isso' });
+  }
+  next();
+}
+const ROLES_VALIDAS = ['admin','planejador','operador'];
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -84,7 +94,7 @@ app.get('/api/categorias', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/categorias', requireAdmin, async (req, res) => {
+app.post('/api/categorias', requireGestor, async (req, res) => {
   const { nome, cor } = req.body;
   if(!nome) return res.status(400).json({ error: 'Nome da categoria é obrigatório' });
   try {
@@ -99,7 +109,7 @@ app.post('/api/categorias', requireAdmin, async (req, res) => {
   }
 });
 
-app.put('/api/categorias/:id', requireAdmin, async (req, res) => {
+app.put('/api/categorias/:id', requireGestor, async (req, res) => {
   const { nome, cor } = req.body;
   try {
     const { rows } = await pool.query(
@@ -113,7 +123,7 @@ app.put('/api/categorias/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/categorias/:id', requireAdmin, async (req, res) => {
+app.delete('/api/categorias/:id', requireGestor, async (req, res) => {
   try {
     // produtos ligados a essa categoria ficam sem categoria (ON DELETE SET NULL)
     await pool.query(`DELETE FROM categorias WHERE id=$1`, [req.params.id]);
@@ -153,7 +163,7 @@ app.post('/api/produtos', async (req, res) => {
   }
 });
 
-app.put('/api/produtos/:id', requireAdmin, async (req, res) => {
+app.put('/api/produtos/:id', async (req, res) => {
   const { descricao, categoria_id, unidade, estoque_minimo, estoque_maximo } = req.body;
   try {
     const { rows } = await pool.query(
@@ -165,7 +175,7 @@ app.put('/api/produtos/:id', requireAdmin, async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/produtos/:id', requireAdmin, async (req, res) => {
+app.delete('/api/produtos/:id', async (req, res) => {
   try {
     await pool.query(`UPDATE produtos SET ativo = FALSE WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
@@ -174,7 +184,7 @@ app.delete('/api/produtos/:id', requireAdmin, async (req, res) => {
 
 // Importação em lote de produtos (planilha/CSV já parseado no frontend).
 // Cria categorias que ainda não existem, pula produtos com código já cadastrado.
-app.post('/api/produtos/importar', requireAdmin, async (req, res) => {
+app.post('/api/produtos/importar', requireGestor, async (req, res) => {
   const { produtos: lista } = req.body;
   if(!Array.isArray(lista) || lista.length === 0){
     return res.status(400).json({ error: 'Nenhum produto para importar' });
@@ -255,7 +265,7 @@ app.post('/api/fornecedores', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/fornecedores/:id', requireAdmin, async (req, res) => {
+app.put('/api/fornecedores/:id', async (req, res) => {
   const { nome, razao, cnpj, telefone, email, contato, obs } = req.body;
   if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
   try {
@@ -268,7 +278,7 @@ app.put('/api/fornecedores/:id', requireAdmin, async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/fornecedores/:id', requireAdmin, async (req, res) => {
+app.delete('/api/fornecedores/:id', async (req, res) => {
   try {
     await pool.query(`UPDATE fornecedores SET ativo = FALSE WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
@@ -333,7 +343,7 @@ app.post('/api/codigos', async (req, res) => {
   }
 });
 
-app.delete('/api/codigos/:id', requireAdmin, async (req, res) => {
+app.delete('/api/codigos/:id', async (req, res) => {
   try {
     await pool.query(`DELETE FROM produto_codigos WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
@@ -617,6 +627,11 @@ app.get('/api/dashboard', async (req, res) => {
        FROM movimentacoes WHERE tipo='saida' AND data = CURRENT_DATE`
     );
 
+    const entradasHoje = await pool.query(
+      `SELECT COALESCE(SUM(valor_total),0) AS valor_total, COALESCE(SUM(quantidade),0) AS quantidade_total, COUNT(*) AS total_movimentacoes
+       FROM movimentacoes WHERE tipo='entrada' AND data = CURRENT_DATE`
+    );
+
     const valorTotalEstoque = await pool.query(
       `SELECT COALESCE(SUM(quantidade_atual * COALESCE(preco_unitario,0)),0) AS total FROM lotes WHERE quantidade_atual > 0`
     );
@@ -629,6 +644,7 @@ app.get('/api/dashboard', async (req, res) => {
         criticidade: r.dias_restantes <= critico ? 'critico' : (r.dias_restantes <= atencao ? 'atencao' : 'ok')
       })),
       baixas_hoje: baixasHoje.rows[0],
+      entradas_hoje: entradasHoje.rows[0],
       limites: { critico, atencao }
     });
   } catch(e){ res.status(500).json({ error: e.message }); }
@@ -644,7 +660,7 @@ app.get('/api/unidades', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/unidades', requireAdmin, async (req, res) => {
+app.post('/api/unidades', requireGestor, async (req, res) => {
   const { sigla, nome } = req.body;
   if(!sigla || !nome) return res.status(400).json({ error: 'Sigla e nome são obrigatórios' });
   try {
@@ -659,7 +675,7 @@ app.post('/api/unidades', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/unidades/:id', requireAdmin, async (req, res) => {
+app.delete('/api/unidades/:id', requireGestor, async (req, res) => {
   try {
     await pool.query(`DELETE FROM unidades WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
@@ -678,7 +694,7 @@ app.get('/api/config', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/config', requireAdmin, async (req, res) => {
+app.post('/api/config', requireGestor, async (req, res) => {
   const { chave, valor } = req.body;
   try {
     await pool.query(
@@ -707,7 +723,7 @@ app.post('/api/usuarios', requireAdmin, async (req, res) => {
   const { nome, pin, role } = req.body;
   if(!nome || !pin || !role) return res.status(400).json({ error: 'Nome, PIN e permissão são obrigatórios' });
   if(!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN deve ter exatamente 4 dígitos' });
-  if(!['admin','operador'].includes(role)) return res.status(400).json({ error: 'Permissão inválida' });
+  if(!ROLES_VALIDAS.includes(role)) return res.status(400).json({ error: 'Permissão inválida' });
   try {
     const { rows } = await pool.query(
       `INSERT INTO usuarios (nome, pin_hash, role) VALUES ($1,$2,$3) RETURNING id, nome, role, ativo, created_at`,
@@ -723,7 +739,7 @@ app.post('/api/usuarios', requireAdmin, async (req, res) => {
 app.put('/api/usuarios/:id', requireAdmin, async (req, res) => {
   const { nome, role } = req.body;
   if(!nome || !role) return res.status(400).json({ error: 'Nome e permissão são obrigatórios' });
-  if(!['admin','operador'].includes(role)) return res.status(400).json({ error: 'Permissão inválida' });
+  if(!ROLES_VALIDAS.includes(role)) return res.status(400).json({ error: 'Permissão inválida' });
   try {
     const { rows } = await pool.query(
       `UPDATE usuarios SET nome=$1, role=$2 WHERE id=$3 RETURNING id, nome, role, ativo, created_at`,
@@ -758,6 +774,207 @@ app.delete('/api/usuarios/:id', requireAdmin, async (req, res) => {
     await pool.query(`UPDATE usuarios SET ativo = FALSE WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
   } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// PEDIDOS DE COMPRA
+// ═══════════════════════════════════════════════════════════
+
+// Lista pedidos. Por padrão esconde os já fechados (concluido/cancelado),
+// a não ser que ?todos=1 seja passado.
+app.get('/api/pedidos', async (req, res) => {
+  try {
+    let q = `SELECT pc.*, f.nome AS fornecedor_nome,
+                    (SELECT COUNT(*) FROM pedido_itens pi WHERE pi.pedido_id = pc.id) AS total_itens
+             FROM pedidos_compra pc
+             LEFT JOIN fornecedores f ON f.id = pc.fornecedor_id`;
+    const vals = [];
+    if(req.query.todos !== '1'){
+      q += ` WHERE pc.status NOT IN ('concluido','cancelado')`;
+    }
+    q += ` ORDER BY pc.data_entrega_prevista ASC NULLS LAST, pc.id DESC`;
+    const { rows } = await pool.query(q, vals);
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/pedidos/:id', async (req, res) => {
+  try {
+    const pedRes = await pool.query(
+      `SELECT pc.*, f.nome AS fornecedor_nome, f.telefone AS fornecedor_telefone
+       FROM pedidos_compra pc LEFT JOIN fornecedores f ON f.id = pc.fornecedor_id
+       WHERE pc.id = $1`, [req.params.id]
+    );
+    if(pedRes.rows.length === 0) return res.status(404).json({ error: 'Pedido não encontrado' });
+    const itensRes = await pool.query(
+      `SELECT pi.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao
+       FROM pedido_itens pi JOIN produtos p ON p.id = pi.produto_id
+       WHERE pi.pedido_id = $1 ORDER BY pi.id`, [req.params.id]
+    );
+    res.json({ ...pedRes.rows[0], itens: itensRes.rows });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/pedidos', requireGestor, async (req, res) => {
+  const { fornecedor_id, data_entrega_prevista, obs, itens } = req.body;
+  if(!fornecedor_id || !Array.isArray(itens) || itens.length === 0){
+    return res.status(400).json({ error: 'Fornecedor e ao menos um item são obrigatórios' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let valorTotal = 0;
+    itens.forEach(it => { valorTotal += (parseFloat(it.quantidade_pedida)||0) * (parseFloat(it.preco_unitario)||0); });
+
+    const pedRes = await client.query(
+      `INSERT INTO pedidos_compra (fornecedor_id, data_entrega_prevista, obs, valor_total, criado_por, status)
+       VALUES ($1,$2,$3,$4,$5,'aberto') RETURNING *`,
+      [fornecedor_id, data_entrega_prevista || null, obs || null, valorTotal, req.usuario.id]
+    );
+    const pedido = pedRes.rows[0];
+
+    for(const it of itens){
+      if(!it.produto_id || !it.quantidade_pedida) continue;
+      const prodRes = await client.query(`SELECT unidade FROM produtos WHERE id=$1`, [it.produto_id]);
+      const unidade = prodRes.rows[0] ? prodRes.rows[0].unidade : (it.unidade || 'kg');
+      await client.query(
+        `INSERT INTO pedido_itens (pedido_id, produto_id, quantidade_pedida, unidade, preco_unitario)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [pedido.id, it.produto_id, it.quantidade_pedida, unidade, it.preco_unitario || null]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, pedido });
+  } catch(e){
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.put('/api/pedidos/:id', requireGestor, async (req, res) => {
+  const { fornecedor_id, data_entrega_prevista, obs } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE pedidos_compra SET fornecedor_id=$1, data_entrega_prevista=$2, obs=$3 WHERE id=$4 RETURNING *`,
+      [fornecedor_id, data_entrega_prevista || null, obs || null, req.params.id]
+    );
+    res.json({ ok: true, pedido: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// Fechar/reabrir/cancelar pedido — só admin ou planejador (mesmo depois do
+// operador ter recebido os itens e o pedido estar "parcial").
+app.patch('/api/pedidos/:id/status', requireGestor, async (req, res) => {
+  const { status } = req.body;
+  if(!['aberto','parcial','concluido','cancelado'].includes(status)){
+    return res.status(400).json({ error: 'Status inválido' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE pedidos_compra SET status=$1 WHERE id=$2 RETURNING *`,
+      [status, req.params.id]
+    );
+    res.json({ ok: true, pedido: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// Recebimento de um pedido: qualquer usuário logado (inclusive Operador).
+// Cada item OBRIGATORIAMENTE precisa de um código de barras lido na hora,
+// pra garantir que a conferência física foi feita — mesmo que o produto já
+// tenha código conhecido. Gera lote + movimentação de entrada por item, e
+// grava/atualiza a associação código→produto. O pedido sempre vira
+// "parcial" após qualquer recebimento (só admin/planejador fecham de vez).
+app.post('/api/pedidos/:id/receber', async (req, res) => {
+  const { itens } = req.body; // [{ item_id, codigo_barras, quantidade_recebida, data_validade }]
+  if(!Array.isArray(itens) || itens.length === 0){
+    return res.status(400).json({ error: 'Nenhum item para receber' });
+  }
+  for(const it of itens){
+    if(!it.codigo_barras || !String(it.codigo_barras).trim()){
+      return res.status(400).json({ error: 'Todo item recebido precisa de um código de barras lido para conferência' });
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pedRes = await client.query(`SELECT * FROM pedidos_compra WHERE id=$1 FOR UPDATE`, [req.params.id]);
+    if(pedRes.rows.length === 0) throw new Error('Pedido não encontrado');
+    const pedido = pedRes.rows[0];
+    if(['concluido','cancelado'].includes(pedido.status)) throw new Error('Este pedido já foi fechado');
+
+    for(const it of itens){
+      const qtd = parseFloat(it.quantidade_recebida);
+      if(!qtd || qtd <= 0) continue;
+
+      const itemRes = await client.query(
+        `SELECT pi.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao, p.unidade AS produto_unidade
+         FROM pedido_itens pi JOIN produtos p ON p.id=pi.produto_id
+         WHERE pi.id=$1 AND pi.pedido_id=$2`,
+        [it.item_id, req.params.id]
+      );
+      if(itemRes.rows.length === 0) continue;
+      const item = itemRes.rows[0];
+      const codigo = String(it.codigo_barras).trim();
+
+      // garante/atualiza a associação código de barras → produto (fator 1,
+      // já que o pedido é feito na unidade base do produto)
+      let produtoCodigoId = null;
+      const codExistente = await client.query(`SELECT * FROM produto_codigos WHERE codigo_barras=$1`, [codigo]);
+      if(codExistente.rows.length > 0){
+        produtoCodigoId = codExistente.rows[0].id;
+      } else {
+        const novoCod = await client.query(
+          `INSERT INTO produto_codigos (codigo_barras, produto_id, fornecedor_id, unidade_compra, fator_conversao)
+           VALUES ($1,$2,$3,$4,1) RETURNING id`,
+          [codigo, item.produto_id, pedido.fornecedor_id, item.produto_unidade]
+        );
+        produtoCodigoId = novoCod.rows[0].id;
+      }
+
+      const codigoLote = `LOT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${item.produto_codigo}-${Math.floor(Math.random()*900+100)}`;
+      const loteRes = await client.query(
+        `INSERT INTO lotes
+          (codigo_lote, produto_id, produto_codigo_id, fornecedor_id,
+           quantidade_comprada, unidade_compra, fator_conversao,
+           quantidade_total, quantidade_atual, unidade,
+           data_validade, preco_unitario, possui_codigo_barras, status, origem)
+         VALUES ($1,$2,$3,$4,$5,$6,1,$5,$5,$6,$7,$8,TRUE,'disponivel','pedido')
+         RETURNING *`,
+        [codigoLote, item.produto_id, produtoCodigoId, pedido.fornecedor_id,
+         qtd, item.produto_unidade, it.data_validade || null, item.preco_unitario]
+      );
+      const lote = loteRes.rows[0];
+
+      await client.query(
+        `INSERT INTO movimentacoes (data, tipo, lote_id, codigo_lote, produto_id, produto, quantidade, unidade, preco_unitario, valor_total, obs)
+         VALUES (CURRENT_DATE,'entrada',$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [lote.id, lote.codigo_lote, item.produto_id, item.produto_descricao, qtd, item.produto_unidade,
+         item.preco_unitario, item.preco_unitario ? item.preco_unitario*qtd : null, `Pedido #${pedido.id}`]
+      );
+
+      await client.query(
+        `UPDATE pedido_itens SET quantidade_recebida = COALESCE(quantidade_recebida,0) + $1,
+           lote_id=$2, codigo_barras_conferido=$3, data_validade=$4, conferido_por=$5, conferido_em=NOW()
+         WHERE id=$6`,
+        [qtd, lote.id, codigo, it.data_validade || null, req.usuario.id, item.id]
+      );
+    }
+
+    await client.query(`UPDATE pedidos_compra SET status='parcial' WHERE id=$1 AND status != 'concluido'`, [req.params.id]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch(e){
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date() }));

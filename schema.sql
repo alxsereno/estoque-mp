@@ -238,6 +238,38 @@ INSERT INTO configuracoes (chave, valor) VALUES
 ON CONFLICT (chave) DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════
+-- PEDIDOS DE COMPRA (planejador cria, operador recebe vinculando
+-- código de barras a cada item para garantir a conferência)
+-- ═══════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS pedidos_compra (id SERIAL PRIMARY KEY);
+ALTER TABLE pedidos_compra ADD COLUMN IF NOT EXISTS fornecedor_id INTEGER REFERENCES fornecedores(id);
+ALTER TABLE pedidos_compra ADD COLUMN IF NOT EXISTS data_pedido DATE DEFAULT CURRENT_DATE;
+ALTER TABLE pedidos_compra ADD COLUMN IF NOT EXISTS data_entrega_prevista DATE;
+ALTER TABLE pedidos_compra ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'aberto';
+-- status: aberto (aguardando entrega) | parcial (algo já recebido) | concluido (fechado pelo planejador/admin) | cancelado
+ALTER TABLE pedidos_compra ADD COLUMN IF NOT EXISTS valor_total NUMERIC(12,2);
+ALTER TABLE pedidos_compra ADD COLUMN IF NOT EXISTS criado_por INTEGER REFERENCES usuarios(id);
+ALTER TABLE pedidos_compra ADD COLUMN IF NOT EXISTS obs TEXT;
+ALTER TABLE pedidos_compra ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+
+CREATE TABLE IF NOT EXISTS pedido_itens (id SERIAL PRIMARY KEY);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS pedido_id INTEGER REFERENCES pedidos_compra(id) ON DELETE CASCADE;
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS produto_id INTEGER REFERENCES produtos(id);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS quantidade_pedida NUMERIC(12,4);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS unidade VARCHAR(10);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS preco_unitario NUMERIC(12,4);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS quantidade_recebida NUMERIC(12,4) DEFAULT 0;
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS lote_id INTEGER REFERENCES lotes(id);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS codigo_barras_conferido VARCHAR(80);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS data_validade DATE;
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS conferido_por INTEGER REFERENCES usuarios(id);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS conferido_em TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_pedido_itens_pedido ON pedido_itens(pedido_id);
+CREATE INDEX IF NOT EXISTS idx_pedidos_status ON pedidos_compra(status);
+CREATE INDEX IF NOT EXISTS idx_pedidos_entrega ON pedidos_compra(data_entrega_prevista);
+
+-- ═══════════════════════════════════════════════════════════
 -- MIGRAÇÃO A PARTIR DA v1 (opcional)
 -- Se você já tem dados na v1 (produtos, fornecedores, lotes, embalagens)
 -- e quer aproveitar produtos/fornecedores, rode isto DEPOIS de criar

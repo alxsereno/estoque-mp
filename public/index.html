@@ -158,6 +158,12 @@ tr:hover td{background:#fafaf7}
 .pin-key:hover{background:#f5f5f2}
 .pin-key:active{transform:scale(.95)}
 .pin-error{color:#c0392b;font-size:12px;margin-bottom:12px;min-height:16px}
+.crono-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:16px}
+.crono-dia{background:#fff;border:1px solid #e5e5e0;border-radius:10px;padding:8px;min-height:140px}
+.crono-dia-label{font-size:11px;color:#888;text-align:center;margin-bottom:8px;font-weight:600}
+.crono-card{background:var(--brand-soft);border-radius:7px;padding:8px;font-size:11px;margin-bottom:6px;cursor:pointer}
+.crono-card:hover{opacity:.85}
+.crono-card b{display:block;font-size:12px;color:var(--brand-dark)}
 </style>
 </head>
 <body>
@@ -241,6 +247,23 @@ tr:hover td{background:#fafaf7}
         <div id="d-vencendo"></div>
       </div>
     </div>
+  </section>
+
+  <!-- INÍCIO (OPERADOR) -->
+  <section class="screen" id="s-inicio">
+    <h1 id="inicio-saudacao">Olá</h1>
+    <p class="sub" id="inicio-data"></p>
+    <div class="grid2" style="margin-bottom:20px">
+      <div class="metric" style="background:var(--brand-soft)">
+        <div class="metric-lbl">Entradas hoje</div>
+        <div class="metric-val" id="ini-entradas-valor" style="color:var(--brand-dark)">—</div>
+      </div>
+      <div class="metric" style="background:#e8f0fe">
+        <div class="metric-lbl">Saídas hoje</div>
+        <div class="metric-val" id="ini-saidas-valor" style="color:#1a56db">—</div>
+      </div>
+    </div>
+    <div class="quick-actions" id="inicio-botoes"></div>
   </section>
 
   <!-- ENTRADA -->
@@ -389,7 +412,7 @@ tr:hover td{background:#fafaf7}
       <tbody id="est-tbody"></tbody>
     </table></div>
     <div class="card" id="est-card-produto" style="display:none"><table>
-      <thead><tr><th>Produto</th><th>Categoria</th><th>Qtd. total</th><th>Pacotes</th><th>Validade</th><th>Estoque</th><th>Valor total</th><th>Valor unitário</th></tr></thead>
+      <thead><tr><th>Produto</th><th>Categoria</th><th>Qtd. total</th><th>Volumes</th><th>Mín.</th><th>Máx.</th><th>Validade</th><th>Estoque</th><th>Valor total</th><th>Valor unitário</th></tr></thead>
       <tbody id="est-produto-tbody"></tbody>
     </table></div>
   </section>
@@ -577,6 +600,58 @@ tr:hover td{background:#fafaf7}
     </table></div>
   </section>
 
+  <!-- PEDIDOS DE COMPRA -->
+  <section class="screen" id="s-pedidos">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <h1>Pedidos de Compra</h1>
+        <p class="sub">Gere pedidos, escolha fornecedor e itens — o operador recebe depois vinculando o código de barras</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#888"><input type="checkbox" id="ped-mostrar-todos" onchange="carregarPedidos()" style="width:auto"> Mostrar fechados</label>
+        <button class="btn btn-dark" onclick="abrirNovoPedido()">+ Novo pedido</button>
+      </div>
+    </div>
+    <div class="card"><table>
+      <thead><tr><th>Pedido</th><th>Fornecedor</th><th>Entrega prevista</th><th>Itens</th><th>Valor total</th><th>Status</th><th></th></tr></thead>
+      <tbody id="ped-tbody"></tbody>
+    </table></div>
+  </section>
+
+  <!-- CRONOGRAMA -->
+  <section class="screen" id="s-cronograma">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <h1>Cronograma de Pedidos</h1>
+        <p class="sub" id="crono-semana-label">Semana atual</p>
+      </div>
+      <div class="btn-row" style="margin:0">
+        <button class="btn btn-sm" onclick="mudarSemanaCronograma(-1)">← Semana anterior</button>
+        <button class="btn btn-sm" onclick="mudarSemanaCronograma(0)">Hoje</button>
+        <button class="btn btn-sm" onclick="mudarSemanaCronograma(1)">Próxima semana →</button>
+      </div>
+    </div>
+    <div class="crono-grid" id="crono-grid"></div>
+  </section>
+
+  <!-- RECEBER PEDIDO -->
+  <section class="screen" id="s-receber-pedido">
+    <h1>Receber Pedido</h1>
+    <p class="sub">Escolha o pedido, escaneie o código de cada item pra confirmar a conferência e informe quantidade/validade</p>
+    <div class="card" id="receber-lista-pedidos-card">
+      <div class="card-title">Pedidos aguardando recebimento</div>
+      <div id="receber-lista-pedidos"></div>
+    </div>
+    <div class="card" id="receber-detalhe-card" style="display:none">
+      <div class="card-title" id="receber-pedido-titulo"></div>
+      <div id="receber-itens-lista"></div>
+      <div class="btn-row">
+        <button class="btn" onclick="fecharRecebimento()">Voltar à lista</button>
+        <button class="btn btn-dark" onclick="confirmarRecebimento()">Confirmar recebimento e dar entrada</button>
+      </div>
+    </div>
+  </section>
+
 </main>
 </div>
 </div>
@@ -640,12 +715,12 @@ async function entrarNoApp(){
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-shell').style.display = 'block';
   document.getElementById('topbar-user-nome').textContent = sessaoUsuario.nome;
-  document.getElementById('topbar-user-role').textContent = sessaoUsuario.role === 'admin' ? 'Admin' : 'Operador';
+  document.getElementById('topbar-user-role').textContent = ROLE_LABEL[sessaoUsuario.role] || sessaoUsuario.role;
   document.getElementById('topbar-avatar').textContent = sessaoUsuario.nome.slice(0,2).toUpperCase();
   initNav();
   initSidebarState();
   try{ await carregarBase(); }catch(e){ console.error(e); }
-  showScreen('dashboard');
+  showScreen(sessaoUsuario.role === 'operador' ? 'inicio' : 'dashboard');
 }
 
 const ICONS = {
@@ -666,22 +741,27 @@ function svgIcon(name){
 }
 
 const SCREENS = [
-  {id:'dashboard', icon:'home', label:'Início', grupo:'Visão geral'},
-  {id:'produtos', icon:'scale', label:'Produtos', grupo:'Cadastros', adminOnly:true},
-  {id:'fornecedores', icon:'truck', label:'Fornecedores', grupo:'Cadastros', adminOnly:true},
-  {id:'config', icon:'gear', label:'Configurações', grupo:'Cadastros', adminOnly:true},
-  {id:'usuarios', icon:'users', label:'Usuários', grupo:'Cadastros', adminOnly:true},
-  {id:'entrada', icon:'entrada', label:'Entrada', grupo:'Operação'},
-  {id:'saida', icon:'saida', label:'Saída', grupo:'Operação'},
-  {id:'estoque', icon:'box', label:'Estoque', grupo:'Operação'},
-  {id:'inventario', icon:'calc', label:'Inventário', grupo:'Operação'},
-  {id:'movimentacoes', icon:'list', label:'Movimentações', grupo:'Operação'},
-  {id:'ajustes', icon:'clipboard', label:'Ajustes', grupo:'Operação'},
+  {id:'dashboard', icon:'home', label:'Início', grupo:'Visão geral', roles:['admin','planejador']},
+  {id:'inicio', icon:'home', label:'Início', grupo:'Visão geral', roles:['operador']},
+  {id:'produtos', icon:'scale', label:'Produtos', grupo:'Cadastros', roles:['admin','planejador','operador']},
+  {id:'fornecedores', icon:'truck', label:'Fornecedores', grupo:'Cadastros', roles:['admin','planejador','operador']},
+  {id:'config', icon:'gear', label:'Configurações', grupo:'Cadastros', roles:['admin','planejador']},
+  {id:'usuarios', icon:'users', label:'Usuários', grupo:'Cadastros', roles:['admin']},
+  {id:'entrada', icon:'entrada', label:'Entrada', grupo:'Operação', roles:['admin','planejador','operador']},
+  {id:'saida', icon:'saida', label:'Saída', grupo:'Operação', roles:['admin','planejador','operador']},
+  {id:'estoque', icon:'box', label:'Estoque', grupo:'Operação', roles:['admin','planejador','operador']},
+  {id:'inventario', icon:'calc', label:'Inventário', grupo:'Operação', roles:['admin','planejador','operador']},
+  {id:'receber-pedido', icon:'entrada', label:'Receber pedido', grupo:'Operação', roles:['admin','planejador','operador']},
+  {id:'movimentacoes', icon:'list', label:'Movimentações', grupo:'Operação', roles:['admin','planejador']},
+  {id:'ajustes', icon:'clipboard', label:'Ajustes', grupo:'Operação', roles:['admin','planejador']},
+  {id:'pedidos', icon:'clipboard', label:'Pedidos de compra', grupo:'Compras', roles:['admin','planejador']},
+  {id:'cronograma', icon:'calc', label:'Cronograma', grupo:'Compras', roles:['admin','planejador']},
 ];
 
 function initNav(){
   const nav = document.getElementById('nav');
-  const visiveis = SCREENS.filter(s => !s.adminOnly || (sessaoUsuario && sessaoUsuario.role === 'admin'));
+  const role = sessaoUsuario ? sessaoUsuario.role : null;
+  const visiveis = SCREENS.filter(s => s.roles.includes(role));
   const grupos = [...new Set(visiveis.map(s=>s.grupo))];
   nav.innerHTML = grupos.map(g => `
     <div class="nav-group-label">${g}</div>
@@ -700,10 +780,11 @@ function initSidebarState(){
 }
 
 const CARREGADORES = {
-  dashboard: carregarDashboard, estoque: carregarEstoque, inventario: carregarInventario,
+  dashboard: carregarDashboard, inicio: carregarInicio, estoque: carregarEstoque, inventario: carregarInventario,
   produtos: carregarProdutos, fornecedores: carregarFornecedores,
   movimentacoes: carregarMovimentacoes, ajustes: carregarAjustes, config: carregarConfig,
-  usuarios: carregarUsuarios
+  usuarios: carregarUsuarios, pedidos: carregarPedidos, cronograma: carregarCronograma,
+  'receber-pedido': carregarReceberPedido
 };
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -849,6 +930,32 @@ async function carregarDashboard(){
         </div>`).join('')
       : '<p style="color:#aaa;font-size:12px">Nenhum lote vencendo nos próximos dias</p>';
   }catch(e){ toast('Erro ao carregar dashboard: '+e.message); }
+}
+
+async function carregarInicio(){
+  document.getElementById('inicio-saudacao').textContent = 'Olá, ' + (sessaoUsuario ? sessaoUsuario.nome : '');
+  document.getElementById('inicio-data').textContent = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
+
+  const botoesIni = [
+    {id:'entrada', label:'Entrada', icon:'entrada', cor:'var(--brand)'},
+    {id:'saida', label:'Saída', icon:'saida', cor:'#1a56db'},
+    {id:'inventario', label:'Inventário', icon:'calc', cor:'#5f5e5a'},
+    {id:'estoque', label:'Estoque', icon:'box', cor:'#5f5e5a'},
+    {id:'produtos', label:'Produtos', icon:'scale', cor:'#5f5e5a'},
+    {id:'fornecedores', label:'Fornecedores', icon:'truck', cor:'#5f5e5a'},
+    {id:'receber-pedido', label:'Receber pedido', icon:'clipboard', cor:'#5f5e5a'}
+  ];
+  document.getElementById('inicio-botoes').innerHTML = botoesIni.map(b => `
+    <button class="quick-btn" style="background:${b.cor}" onclick="showScreen('${b.id}')">
+      <span class="quick-icon">${svgIcon(b.icon)}</span>
+      <span>${b.label}</span>
+    </button>`).join('');
+
+  try{
+    const d = await api('/api/dashboard');
+    document.getElementById('ini-entradas-valor').textContent = fmtMoeda(d.entradas_hoje.valor_total);
+    document.getElementById('ini-saidas-valor').textContent = fmtMoeda(d.baixas_hoje.valor_total);
+  }catch(e){ toast('Erro: '+e.message); }
 }
 
 // ═══════════════════════ ENTRADA ═══════════════════════
@@ -1365,10 +1472,8 @@ function statusValidade(dataValidade){
 function statusEstoque(produtoId, qtdAtual){
   const p = produtos.find(x => x.id === produtoId);
   const min = p && p.estoque_minimo != null ? parseFloat(p.estoque_minimo) : null;
-  const max = p && p.estoque_maximo != null ? parseFloat(p.estoque_maximo) : null;
-  if(min == null && max == null) return { label: '—', cls: 'badge-gray', dot: '#ccc' };
-  if(min != null && qtdAtual < min) return { label: 'Baixo', cls: 'badge-danger', dot: '#c0392b' };
-  if(max != null && qtdAtual > max) return { label: 'Excesso', cls: 'badge-info', dot: '#1a56db' };
+  if(qtdAtual <= 0) return { label: 'Zerado', cls: 'badge-danger', dot: '#c0392b' };
+  if(min != null && qtdAtual < min) return { label: 'Abaixo do mínimo', cls: 'badge-warn', dot: '#b8860b' };
   return { label: 'Ok', cls: 'badge-ok', dot: '#1e7e34' };
 }
 async function carregarEstoque(){
@@ -1398,23 +1503,31 @@ function estoqueAgrupadoPorProduto(filtrado){
   const grupos = {};
   filtrado.forEach(l => {
     const key = l.produto_id;
-    if(!grupos[key]) grupos[key] = { produto_id: l.produto_id, produto_descricao: l.produto_descricao, categoria: l.categoria, unidade: l.unidade, qtd: 0, nLotes: 0, valor: 0, piorStatus: null, piorRank: -1, pacotes: {} };
+    if(!grupos[key]) grupos[key] = { produto_id: l.produto_id, produto_descricao: l.produto_descricao, categoria: l.categoria, unidade: l.unidade, qtd: 0, nLotes: 0, valor: 0, piorStatus: null, piorRank: -1, volumes: {} };
     const st = statusValidade(l.data_validade);
     const rank = { 'Ok':0, 'Sem validade':0, 'Atenção':1, 'Crítico':2, 'Vencido':3 }[st.label];
     grupos[key].qtd += parseFloat(l.quantidade_atual);
     grupos[key].nLotes += 1;
     grupos[key].valor += parseFloat(l.quantidade_atual) * (parseFloat(l.preco_unitario)||0);
     if(rank > grupos[key].piorRank){ grupos[key].piorRank = rank; grupos[key].piorStatus = st; }
-    if(l.quantidade_comprada && l.unidade_compra){
-      grupos[key].pacotes[l.unidade_compra] = (grupos[key].pacotes[l.unidade_compra]||0) + parseFloat(l.quantidade_comprada);
+    // Volumes = saldo ATUAL do lote convertido de volta pra unidade de compra
+    // (não a quantidade comprada originalmente) — assim acompanha as saídas.
+    if(l.fator_conversao && parseFloat(l.fator_conversao) > 0 && l.unidade_compra && parseFloat(l.quantidade_atual) > 0){
+      const volRestante = parseFloat(l.quantidade_atual) / parseFloat(l.fator_conversao);
+      grupos[key].volumes[l.unidade_compra] = (grupos[key].volumes[l.unidade_compra]||0) + volRestante;
     }
   });
-  return Object.values(grupos).map(g => ({
-    ...g,
-    pacotesTxt: Object.entries(g.pacotes).map(([un,qtd]) => `${fmtNum(qtd)} ${un}`).join(', ') || '—',
-    valorUnitario: g.qtd > 0 ? (g.valor / g.qtd) : 0,
-    statusEstoque: statusEstoque(g.produto_id, g.qtd)
-  }));
+  return Object.values(grupos).map(g => {
+    const p = produtos.find(x => x.id === g.produto_id);
+    return {
+      ...g,
+      volumesTxt: Object.entries(g.volumes).map(([un,qtd]) => `${fmtNum(qtd)} ${un}`).join(', ') || '—',
+      valorUnitario: g.qtd > 0 ? (g.valor / g.qtd) : 0,
+      statusEstoque: statusEstoque(g.produto_id, g.qtd),
+      estoqueMin: p && p.estoque_minimo != null ? fmtNum(p.estoque_minimo) : '—',
+      estoqueMax: p && p.estoque_maximo != null ? fmtNum(p.estoque_maximo) : '—'
+    };
+  });
 }
 function renderEstoque(){
   const filtrado = estoqueFiltrado();
@@ -1440,12 +1553,14 @@ function renderEstoque(){
         <td>${g.produto_descricao}</td>
         <td>${catBadge(g.categoria)}</td>
         <td>${fmtNum(g.qtd)} ${g.unidade}</td>
-        <td>${g.pacotesTxt}</td>
+        <td>${g.volumesTxt}</td>
+        <td>${g.estoqueMin}</td>
+        <td>${g.estoqueMax}</td>
         <td><span class="badge ${g.piorStatus.cls}"><span class="status-dot" style="background:${g.piorStatus.dot}"></span>${g.piorStatus.label}</span></td>
         <td><span class="badge ${g.statusEstoque.cls}"><span class="status-dot" style="background:${g.statusEstoque.dot}"></span>${g.statusEstoque.label}</span></td>
         <td>${fmtMoeda(g.valor)}</td>
         <td>${fmtMoeda(g.valorUnitario)} / ${g.unidade}</td>
-      </tr>`).join('') || '<tr><td colspan="8" style="color:#aaa;text-align:center;padding:24px">Nenhum produto em estoque</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="10" style="color:#aaa;text-align:center;padding:24px">Nenhum produto em estoque</td></tr>';
   }
 }
 
@@ -1462,9 +1577,9 @@ function exportarEstoqueExcel(){
     ]);
   } else {
     const agrupado = estoqueAgrupadoPorProduto(filtrado);
-    headers = ['Produto','Categoria','Qtd. total','Unidade','Pacotes','Status validade','Status estoque','Valor total (R$)','Valor unitário (R$)'];
+    headers = ['Produto','Categoria','Qtd. total','Unidade','Volumes','Mín.','Máx.','Status validade','Status estoque','Valor total (R$)','Valor unitário (R$)'];
     linhas = agrupado.map(g => [
-      g.produto_descricao, g.categoria||'', g.qtd, g.unidade, g.pacotesTxt,
+      g.produto_descricao, g.categoria||'', g.qtd, g.unidade, g.volumesTxt, g.estoqueMin, g.estoqueMax,
       g.piorStatus.label, g.statusEstoque.label, Number(g.valor.toFixed(2)), Number(g.valorUnitario.toFixed(2))
     ]);
   }
@@ -1490,8 +1605,8 @@ function exportarEstoquePDF(){
   } else {
     const agrupado = estoqueAgrupadoPorProduto(filtrado);
     tabelaHtml = `<table style="width:100%;border-collapse:collapse;font-size:11px">
-      <thead><tr>${['Produto','Categoria','Qtd. total','Pacotes','Validade','Estoque','Valor total','Valor unitário'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
-      <tbody>${agrupado.map(g => `<tr>${[g.produto_descricao, g.categoria||'—', fmtNum(g.qtd)+' '+g.unidade, g.pacotesTxt, g.piorStatus.label, g.statusEstoque.label, fmtMoeda(g.valor), fmtMoeda(g.valorUnitario)+'/'+g.unidade].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      <thead><tr>${['Produto','Categoria','Qtd. total','Volumes','Mín.','Máx.','Validade','Estoque','Valor total','Valor unitário'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
+      <tbody>${agrupado.map(g => `<tr>${[g.produto_descricao, g.categoria||'—', fmtNum(g.qtd)+' '+g.unidade, g.volumesTxt, g.estoqueMin, g.estoqueMax, g.piorStatus.label, g.statusEstoque.label, fmtMoeda(g.valor), fmtMoeda(g.valorUnitario)+'/'+g.unidade].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
   area.innerHTML = `
     <div style="padding:12mm;font-family:sans-serif">
@@ -2012,8 +2127,8 @@ document.addEventListener('keydown', e => {
 });
 
 // ═══════════════════════ USUÁRIOS ═══════════════════════
-const ROLE_LABEL = { admin: 'Admin', operador: 'Operador' };
-const ROLE_BADGE = { admin: 'badge-danger', operador: 'badge-info' };
+const ROLE_LABEL = { admin: 'Admin', planejador: 'Planejador', operador: 'Operador' };
+const ROLE_BADGE = { admin: 'badge-danger', planejador: 'badge-warn', operador: 'badge-info' };
 async function carregarUsuarios(){
   const lista = await api('/api/usuarios');
   document.getElementById('usu-tbody').innerHTML = lista.map(u => `
@@ -2037,7 +2152,7 @@ function abrirNovoUsuario(){
     <div class="grid2" style="margin-bottom:16px">
       <div class="field"><label>PIN (4 dígitos)</label><input id="modal-u-pin" maxlength="4" inputmode="numeric" placeholder="0000"></div>
       <div class="field"><label>Permissão</label>
-        <select id="modal-u-role"><option value="operador">Operador — executa entrada/saída/estoque</option><option value="admin">Admin — acesso completo</option></select>
+        <select id="modal-u-role"><option value="operador">Operador — entrada, saída, inventário, produtos e fornecedores</option><option value="planejador">Planejador — acesso total, exceto gerenciar usuários</option><option value="admin">Admin — acesso completo</option></select>
       </div>
     </div>
     <div class="btn-row">
@@ -2063,7 +2178,8 @@ function editarUsuario(id, nome, role){
     <div class="field" style="margin-bottom:12px"><label>Nome completo</label><input id="modal-u-nome" value="${nome.replace(/"/g,'&quot;')}"></div>
     <div class="field" style="margin-bottom:16px"><label>Permissão</label>
       <select id="modal-u-role">
-        <option value="operador" ${role==='operador'?'selected':''}>Operador — executa entrada/saída/estoque</option>
+        <option value="operador" ${role==='operador'?'selected':''}>Operador — entrada, saída, inventário, produtos e fornecedores</option>
+        <option value="planejador" ${role==='planejador'?'selected':''}>Planejador — acesso total, exceto gerenciar usuários</option>
         <option value="admin" ${role==='admin'?'selected':''}>Admin — acesso completo</option>
       </select>
     </div>
@@ -2109,6 +2225,241 @@ async function inativarUsuario(id, nome){
     await api(`/api/usuarios/${id}`, { method:'DELETE' });
     toast('✓ Usuário inativado');
     carregarUsuarios();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+// ═══════════════════════ PEDIDOS DE COMPRA ═══════════════════════
+const PEDIDO_STATUS_LABEL = { aberto:'Aberto', parcial:'Parcial', concluido:'Concluído', cancelado:'Cancelado' };
+const PEDIDO_STATUS_BADGE = { aberto:'badge-info', parcial:'badge-warn', concluido:'badge-ok', cancelado:'badge-gray' };
+let pedidosCache = [];
+
+async function carregarPedidos(){
+  const todos = document.getElementById('ped-mostrar-todos').checked;
+  pedidosCache = await api('/api/pedidos' + (todos ? '?todos=1' : ''));
+  document.getElementById('ped-tbody').innerHTML = pedidosCache.map(p => `
+    <tr>
+      <td>#${String(p.id).padStart(4,'0')}</td>
+      <td>${p.fornecedor_nome||'—'}</td>
+      <td>${fmtData(p.data_entrega_prevista)}</td>
+      <td>${p.total_itens}</td>
+      <td>${fmtMoeda(p.valor_total)}</td>
+      <td><span class="badge ${PEDIDO_STATUS_BADGE[p.status]}">${PEDIDO_STATUS_LABEL[p.status]}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick="verPedido(${p.id})">Ver</button>
+        <button class="btn btn-sm" onclick="exportarPedidoPDF(${p.id})">PDF</button>
+        ${(sessaoUsuario.role==='admin'||sessaoUsuario.role==='planejador') && p.status!=='concluido' && p.status!=='cancelado' ? `<button class="btn btn-sm btn-dark" onclick="fecharPedido(${p.id})">Fechar</button>` : ''}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum pedido encontrado</td></tr>';
+}
+
+let itensNovoPedido = [];
+function abrirNovoPedido(){
+  itensNovoPedido = [];
+  abrirModal('Novo pedido de compra', `
+    <div class="grid2" style="margin-bottom:12px">
+      <div class="field"><label>Fornecedor*</label><select id="modal-ped-fornecedor"><option value="">Selecione...</option>${fornecedores.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('')}</select></div>
+      <div class="field"><label>Entrega prevista</label><input type="date" id="modal-ped-entrega"></div>
+    </div>
+    <label style="display:block;margin-bottom:6px">Itens</label>
+    <div class="grid3" style="margin-bottom:8px">
+      <select id="modal-ped-item-produto">${produtos.map(p=>`<option value="${p.id}">${p.codigo} — ${p.descricao}</option>`).join('')}</select>
+      <input type="number" id="modal-ped-item-qtd" placeholder="Quantidade" step="0.0001">
+      <input type="number" id="modal-ped-item-preco" placeholder="Preço unit. (R$)" step="0.0001">
+    </div>
+    <div class="btn-row" style="justify-content:flex-start;margin-bottom:10px">
+      <button class="btn btn-sm" onclick="adicionarItemPedido()">+ Adicionar item</button>
+    </div>
+    <div id="modal-ped-itens-lista" style="margin-bottom:10px"></div>
+    <div style="text-align:right;font-size:14px;margin-bottom:14px">Total estimado: <b id="modal-ped-total">R$ 0,00</b></div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarNovoPedido()">Gerar pedido</button>
+    </div>
+  `);
+}
+function adicionarItemPedido(){
+  const produtoId = document.getElementById('modal-ped-item-produto').value;
+  const qtd = parseFloat(document.getElementById('modal-ped-item-qtd').value);
+  const preco = parseFloat(document.getElementById('modal-ped-item-preco').value);
+  if(!produtoId || !qtd || !preco){ toast('Preencha produto, quantidade e preço'); return; }
+  const produto = produtos.find(p => p.id == produtoId);
+  itensNovoPedido.push({ produto_id: parseInt(produtoId), descricao: produto.descricao, unidade: produto.unidade, quantidade_pedida: qtd, preco_unitario: preco });
+  document.getElementById('modal-ped-item-qtd').value = '';
+  document.getElementById('modal-ped-item-preco').value = '';
+  renderItensNovoPedido();
+}
+function removerItemPedido(i){
+  itensNovoPedido.splice(i,1);
+  renderItensNovoPedido();
+}
+function renderItensNovoPedido(){
+  document.getElementById('modal-ped-itens-lista').innerHTML = itensNovoPedido.map((it,i) => `
+    <div style="display:flex;justify-content:space-between;padding:6px 10px;border:1px solid #eee;border-radius:7px;margin-bottom:5px;font-size:12px">
+      <span>${it.descricao} — ${fmtNum(it.quantidade_pedida)} ${it.unidade} × ${fmtMoeda(it.preco_unitario)}</span>
+      <button class="btn-icon" onclick="removerItemPedido(${i})">⊘</button>
+    </div>`).join('');
+  const total = itensNovoPedido.reduce((s,it)=>s+it.quantidade_pedida*it.preco_unitario, 0);
+  document.getElementById('modal-ped-total').textContent = fmtMoeda(total);
+}
+async function salvarNovoPedido(){
+  const fornecedor_id = document.getElementById('modal-ped-fornecedor').value;
+  const data_entrega_prevista = document.getElementById('modal-ped-entrega').value;
+  if(!fornecedor_id){ toast('Selecione o fornecedor'); return; }
+  if(itensNovoPedido.length === 0){ toast('Adicione ao menos um item'); return; }
+  try{
+    await api('/api/pedidos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fornecedor_id, data_entrega_prevista: data_entrega_prevista||null, itens: itensNovoPedido }) });
+    toast('✓ Pedido gerado');
+    fecharModal();
+    carregarPedidos();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function verPedido(id){
+  try{
+    const p = await api(`/api/pedidos/${id}`);
+    abrirModal(`Pedido #${String(p.id).padStart(4,'0')} — ${p.fornecedor_nome||''}`, `
+      <p style="font-size:12px;color:#888;margin-bottom:10px">Entrega prevista: ${fmtData(p.data_entrega_prevista)} · Status: ${PEDIDO_STATUS_LABEL[p.status]}</p>
+      <table style="width:100%;font-size:12px;margin-bottom:12px">
+        <thead><tr><th>Produto</th><th>Pedido</th><th>Recebido</th><th>Preço unit.</th></tr></thead>
+        <tbody>${p.itens.map(it => `<tr><td>${it.produto_descricao}</td><td>${fmtNum(it.quantidade_pedida)} ${it.unidade}</td><td>${fmtNum(it.quantidade_recebida)} ${it.unidade}</td><td>${fmtMoeda(it.preco_unitario)}</td></tr>`).join('')}</tbody>
+      </table>
+      <div style="text-align:right;font-size:14px;margin-bottom:14px">Total: <b>${fmtMoeda(p.valor_total)}</b></div>
+      <div class="btn-row"><button class="btn" onclick="fecharModal()">Fechar</button></div>
+    `);
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function fecharPedido(id){
+  if(!confirm('Marcar este pedido como concluído? Ele some da lista padrão.')) return;
+  try{
+    await api(`/api/pedidos/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'concluido'}) });
+    toast('✓ Pedido concluído');
+    carregarPedidos();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function exportarPedidoPDF(id){
+  try{
+    const p = await api(`/api/pedidos/${id}`);
+    const area = document.getElementById('print-area');
+    area.innerHTML = `
+      <div style="padding:12mm;font-family:sans-serif">
+        <h2>Pedido de Compra #${String(p.id).padStart(4,'0')}</h2>
+        <p style="color:#666;font-size:12px;margin-bottom:14px">Fornecedor: ${p.fornecedor_nome||'—'} · Entrega prevista: ${fmtData(p.data_entrega_prevista)} · Gerado em ${fmtData(p.data_pedido)}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr>${['Produto','Quantidade','Preço unit.','Subtotal'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:6px">${h}</th>`).join('')}</tr></thead>
+          <tbody>${p.itens.map(it => `<tr>${[it.produto_descricao, fmtNum(it.quantidade_pedida)+' '+it.unidade, fmtMoeda(it.preco_unitario), fmtMoeda(it.quantidade_pedida*it.preco_unitario)].map(v=>`<td style="padding:6px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>
+        <p style="text-align:right;margin-top:12px;font-size:14px">Total: <b>${fmtMoeda(p.valor_total)}</b></p>
+      </div>`;
+    window.print();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+// ═══════════════════════ CRONOGRAMA ═══════════════════════
+let semanaOffsetCronograma = 0;
+function inicioDaSemana(offsetSemanas){
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const diaSemana = (hoje.getDay() + 6) % 7; // 0 = segunda
+  const seg = new Date(hoje); seg.setDate(hoje.getDate() - diaSemana + offsetSemanas*7);
+  return seg;
+}
+function mudarSemanaCronograma(delta){
+  semanaOffsetCronograma = delta === 0 ? 0 : semanaOffsetCronograma + delta;
+  renderCronograma();
+}
+async function carregarCronograma(){
+  pedidosCache = await api('/api/pedidos?todos=1');
+  renderCronograma();
+}
+function renderCronograma(){
+  const seg = inicioDaSemana(semanaOffsetCronograma);
+  const dom = new Date(seg); dom.setDate(seg.getDate()+6);
+  document.getElementById('crono-semana-label').textContent = `${seg.toLocaleDateString('pt-BR')} a ${dom.toLocaleDateString('pt-BR')}`;
+
+  const DIAS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+  document.getElementById('crono-grid').innerHTML = DIAS.map((label,i) => {
+    const dia = new Date(seg); dia.setDate(seg.getDate()+i);
+    const diaStr = dia.toISOString().slice(0,10);
+    const pedidosDoDia = pedidosCache.filter(p => p.data_entrega_prevista && p.data_entrega_prevista.slice(0,10) === diaStr);
+    return `<div class="crono-dia">
+      <div class="crono-dia-label">${label} ${dia.getDate()}/${dia.getMonth()+1}</div>
+      ${pedidosDoDia.map(p => `
+        <div class="crono-card" onclick="verPedido(${p.id})">
+          <b>#${String(p.id).padStart(4,'0')}</b>
+          ${p.fornecedor_nome||''}<br>
+          <span class="badge ${PEDIDO_STATUS_BADGE[p.status]}" style="margin-top:3px">${PEDIDO_STATUS_LABEL[p.status]}</span>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════ RECEBER PEDIDO ═══════════════════════
+let pedidoRecebendo = null;
+async function carregarReceberPedido(){
+  fecharRecebimento();
+  const lista = await api('/api/pedidos');
+  const pendentes = lista.filter(p => p.status === 'aberto' || p.status === 'parcial');
+  document.getElementById('receber-lista-pedidos').innerHTML = pendentes.map(p => `
+    <div class="lote-pick" onclick="abrirRecebimento(${p.id})">
+      <div>
+        <span class="lote-tag">#${String(p.id).padStart(4,'0')}</span>
+        <span class="badge ${PEDIDO_STATUS_BADGE[p.status]}" style="margin-left:6px">${PEDIDO_STATUS_LABEL[p.status]}</span>
+        <div style="color:#888;font-size:12px;margin-top:4px">${p.fornecedor_nome||'—'} · entrega prevista ${fmtData(p.data_entrega_prevista)}</div>
+      </div>
+      <div style="font-weight:600">${p.total_itens} item(ns)</div>
+    </div>`).join('') || '<p style="color:#aaa;font-size:13px">Nenhum pedido aguardando recebimento</p>';
+}
+async function abrirRecebimento(pedidoId){
+  try{
+    pedidoRecebendo = await api(`/api/pedidos/${pedidoId}`);
+    document.getElementById('receber-lista-pedidos-card').style.display = 'none';
+    document.getElementById('receber-detalhe-card').style.display = 'block';
+    document.getElementById('receber-pedido-titulo').textContent = `Recebendo pedido #${String(pedidoRecebendo.id).padStart(4,'0')} — ${pedidoRecebendo.fornecedor_nome||''}`;
+    document.getElementById('receber-itens-lista').innerHTML = pedidoRecebendo.itens.map(it => {
+      const falta = parseFloat(it.quantidade_pedida) - parseFloat(it.quantidade_recebida||0);
+      return `<div class="item-row" data-item-id="${it.id}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:8px">
+      <div>
+        <b>${it.produto_descricao}</b>
+        <div style="color:#888;font-size:12px">Pedido: ${fmtNum(it.quantidade_pedida)} ${it.unidade} · já recebido: ${fmtNum(it.quantidade_recebida||0)} ${it.unidade}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input type="text" class="receber-codigo" placeholder="Código de barras*" style="width:130px">
+        <button class="btn btn-sm" title="Escanear">📷</button>
+        <input type="number" class="receber-qtd" placeholder="Qtd. recebida" step="0.0001" value="${falta>0?falta:''}" style="width:100px">
+        <input type="date" class="receber-validade" style="width:130px">
+      </div>
+    </div>`;
+    }).join('');
+    // liga o botão de câmera de cada linha ao campo de código correspondente
+    document.querySelectorAll('#receber-itens-lista .item-row').forEach((row,i) => {
+      const input = row.querySelector('.receber-codigo');
+      input.id = 'receber-codigo-'+i;
+      const btn = row.querySelector('button.btn-sm');
+      btn.setAttribute('onclick', `abrirScanner('receber-codigo-${i}', function(){})`);
+    });
+  }catch(e){ toast('Erro: '+e.message); }
+}
+function fecharRecebimento(){
+  pedidoRecebendo = null;
+  document.getElementById('receber-lista-pedidos-card').style.display = 'block';
+  document.getElementById('receber-detalhe-card').style.display = 'none';
+  carregarReceberPedido();
+}
+async function confirmarRecebimento(){
+  if(!pedidoRecebendo) return;
+  const linhas = [...document.querySelectorAll('#receber-itens-lista .item-row')];
+  const itens = [];
+  for(const row of linhas){
+    const codigo = row.querySelector('.receber-codigo').value.trim();
+    const qtd = row.querySelector('.receber-qtd').value;
+    const validade = row.querySelector('.receber-validade').value;
+    if(!qtd || parseFloat(qtd) <= 0) continue;
+    if(!codigo){ toast('Escaneie o código de barras de todos os itens que estão sendo recebidos'); return; }
+    itens.push({ item_id: row.dataset.itemId, codigo_barras: codigo, quantidade_recebida: qtd, data_validade: validade || null });
+  }
+  if(itens.length === 0){ toast('Informe a quantidade recebida de ao menos um item'); return; }
+  try{
+    await api(`/api/pedidos/${pedidoRecebendo.id}/receber`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({itens}) });
+    toast('✓ Recebimento confirmado — itens já estão no estoque');
+    fecharRecebimento();
   }catch(e){ toast('Erro: '+e.message); }
 }
 
