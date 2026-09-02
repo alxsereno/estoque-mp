@@ -39,6 +39,7 @@ h1{font-size:20px;font-weight:600;margin-bottom:4px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
 .full{grid-column:1/-1}
 .field{display:flex;flex-direction:column;gap:5px}
 label{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em}
@@ -141,8 +142,6 @@ tr:hover td{background:#fafaf7}
 .quick-btn:active{opacity:.85}
 .quick-icon{width:30px;height:30px}
 .quick-icon svg{width:100%;height:100%}
-.quick-entrada{background:var(--brand)}
-.quick-saida{background:#1a56db}
 .avatar{width:32px;height:32px;border-radius:50%;background:var(--brand-soft);color:var(--brand-dark);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
 .topbar-right{display:flex;align-items:center;gap:10px}
 .topbar-user{text-align:right;font-size:12px;line-height:1.3}
@@ -207,7 +206,8 @@ tr:hover td{background:#fafaf7}
 <div class="app" id="app-shell" style="display:none">
 <header class="topbar no-print">
   <div class="topbar-left">
-    <button class="collapse-btn" title="Recolher/expandir menu" onclick="toggleSidebar()" aria-label="Recolher menu">☰</button>
+    <button class="collapse-btn" title="Recolher/expandir menu" onclick="toggleSidebar()" aria-label="Recolher menu" id="collapse-btn">☰</button>
+    <button class="collapse-btn" title="Início" onclick="showScreen('inicio')" aria-label="Início" id="home-btn" style="display:none">🏠</button>
     <div class="topbar-icon">📦</div>
     <div class="topbar-title">Estoque MP<span>Simples e Natural</span></div>
   </div>
@@ -218,7 +218,7 @@ tr:hover td{background:#fafaf7}
   </div>
 </header>
 <div class="app-body">
-<aside class="sidebar no-print">
+<aside class="sidebar no-print" id="sidebar">
   <nav id="nav"></nav>
 </aside>
 <main class="content">
@@ -227,19 +227,10 @@ tr:hover td{background:#fafaf7}
   <section class="screen" id="s-dashboard">
     <h1>Dashboard</h1>
     <p class="sub">Visão geral do estoque de matéria-prima</p>
-    <div class="quick-actions">
-      <button class="quick-btn quick-entrada" onclick="showScreen('entrada')">
-        <span class="quick-icon">📥</span>
-        <span>Entrada</span>
-      </button>
-      <button class="quick-btn quick-saida" onclick="showScreen('saida')">
-        <span class="quick-icon">📤</span>
-        <span>Saída</span>
-      </button>
-    </div>
-    <div class="grid4" style="margin-bottom:16px">
+    <div class="grid5" style="margin-bottom:16px">
+      <div class="metric" style="background:var(--brand-soft)"><div class="metric-lbl">Entradas hoje</div><div class="metric-val" id="d-entradas-valor" style="color:var(--brand-dark)">—</div></div>
+      <div class="metric" style="background:#e8f0fe"><div class="metric-lbl">Saídas hoje</div><div class="metric-val" id="d-baixas-valor" style="color:#1a56db">—</div></div>
       <div class="metric"><div class="metric-lbl">Valor total em estoque</div><div class="metric-val" id="d-valor-total">—</div></div>
-      <div class="metric"><div class="metric-lbl">Baixas hoje (valor)</div><div class="metric-val" id="d-baixas-valor">—</div><div class="metric-sub" id="d-baixas-sub"></div></div>
       <div class="metric"><div class="metric-lbl">Lotes vencendo</div><div class="metric-val" id="d-vencendo-count">—</div></div>
       <div class="metric"><div class="metric-lbl">Produtos cadastrados</div><div class="metric-val" id="d-produtos-count">—</div></div>
     </div>
@@ -724,9 +715,15 @@ async function entrarNoApp(){
   document.getElementById('topbar-user-role').textContent = ROLE_LABEL[sessaoUsuario.role] || sessaoUsuario.role;
   document.getElementById('topbar-avatar').textContent = sessaoUsuario.nome.slice(0,2).toUpperCase();
   initNav();
-  initSidebarState();
+
+  const isOperador = sessaoUsuario.role === 'operador';
+  document.getElementById('sidebar').style.display = isOperador ? 'none' : 'flex';
+  document.getElementById('collapse-btn').style.display = isOperador ? 'none' : 'flex';
+  document.getElementById('home-btn').style.display = isOperador ? 'flex' : 'none';
+  if(!isOperador) initSidebarState();
+
   try{ await carregarBase(); }catch(e){ console.error(e); }
-  showScreen(sessaoUsuario.role === 'operador' ? 'inicio' : 'dashboard');
+  showScreen(isOperador ? 'inicio' : 'dashboard');
 }
 
 const ICONS = {
@@ -910,9 +907,9 @@ function atualizarSelectUnidadeBase(){
 async function carregarDashboard(){
   try{
     const d = await api('/api/dashboard');
-    document.getElementById('d-valor-total').textContent = fmtMoeda(d.valor_total_estoque);
+    document.getElementById('d-entradas-valor').textContent = fmtMoeda(d.entradas_hoje.valor_total);
     document.getElementById('d-baixas-valor').textContent = fmtMoeda(d.baixas_hoje.valor_total);
-    document.getElementById('d-baixas-sub').textContent = `${d.baixas_hoje.total_movimentacoes} saída(s) hoje`;
+    document.getElementById('d-valor-total').textContent = fmtMoeda(d.valor_total_estoque);
     document.getElementById('d-vencendo-count').textContent = d.lotes_vencendo.length;
     document.getElementById('d-produtos-count').textContent = produtos.length;
 
@@ -2284,26 +2281,30 @@ function abrirNovoPedido(){
       </div>
       <div class="field"><label>Entrega prevista</label><input type="date" id="modal-ped-entrega"></div>
     </div>
+    <div class="field" style="margin-bottom:14px"><label>Observações do pedido (opcional)</label><textarea id="modal-ped-obs" rows="2" placeholder="Instruções gerais pra quem for receber..."></textarea></div>
 
     <label style="display:block;margin-bottom:8px">Adicionar item</label>
     <div class="card" style="background:#f8f8f5;padding:14px;margin-bottom:14px">
-      <div class="field busca-inline" style="margin-bottom:10px">
+      <div class="field busca-inline" style="margin-bottom:12px">
         <label>Produto</label>
         <input type="text" id="modal-ped-item-busca" placeholder="Digite o nome ou código do produto..." autocomplete="off" oninput="buscarProdutoPedido(this.value)">
         <div class="autocomplete" id="modal-ped-item-autocomplete"></div>
       </div>
       <div id="modal-ped-item-volumes" style="display:none">
-        <div class="grid3" style="margin-bottom:10px">
-          <div class="field"><label>Quantidade de volumes</label><input type="number" id="modal-ped-item-qtdvol" step="0.0001" placeholder="Ex: 5" oninput="calcularResumoItemPedido()"></div>
-          <div class="field"><label>Unidade de compra</label><select id="modal-ped-item-unvol" onchange="calcularResumoItemPedido()"></select></div>
-          <div class="field"><label>Tamanho do volume (<span id="modal-ped-item-unbase">kg</span>)</label><input type="number" id="modal-ped-item-fator" step="0.0001" placeholder="Ex: 5" oninput="calcularResumoItemPedido()"></div>
+        <div class="grid2" style="margin-bottom:10px;align-items:end">
+          <div class="field"><label>Quantidade*</label><input type="number" id="modal-ped-item-qtdvol" step="0.0001" placeholder="Ex: 20" oninput="calcularResumoItemPedido()"></div>
+          <div class="field"><label>Unidade de medida</label><select id="modal-ped-item-unvol" onchange="calcularResumoItemPedido()"></select></div>
         </div>
-        <div class="field" style="margin-bottom:10px"><label id="modal-ped-item-preco-label">Preço por volume (R$)</label><input type="number" id="modal-ped-item-precovol" step="0.0001" placeholder="Ex: 10,00" oninput="calcularResumoItemPedido()"></div>
-        <div style="background:var(--brand-soft);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px">
-          <div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#666">Quantidade total</span><b id="modal-ped-item-out-qtd">—</b></div>
-          <div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#666">Preço por <span id="modal-ped-item-unbase2">kg</span></span><b id="modal-ped-item-out-preco">—</b></div>
-          <div style="display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #cfe6d4;margin-top:2px"><span style="color:var(--brand-dark)">Subtotal do item</span><b style="color:var(--brand-dark)" id="modal-ped-item-out-total">—</b></div>
+        <div class="grid3" style="margin-bottom:10px;align-items:end;grid-template-columns:2fr 1fr 1.4fr">
+          <div class="field"><label id="modal-ped-item-equiv-label">1 unidade equivale a*</label><input type="number" id="modal-ped-item-fator" step="0.0001" value="1" placeholder="Ex: 5" oninput="calcularResumoItemPedido()"></div>
+          <div class="field"><label>&nbsp;</label><input type="text" id="modal-ped-item-unbase-campo" disabled></div>
+          <div class="field"><label>Quantidade* (<span id="modal-ped-item-unbase2">kg</span>)</label><input type="text" id="modal-ped-item-out-qtd-campo" disabled></div>
         </div>
+        <div class="grid2" style="margin-bottom:10px">
+          <div class="field"><label id="modal-ped-item-preco-label">Valor unitário (R$)</label><input type="number" id="modal-ped-item-precovol" step="0.0001" placeholder="Ex: 45,90" oninput="calcularResumoItemPedido()"></div>
+          <div class="field"><label>Valor total</label><input type="text" id="modal-ped-item-out-total-campo" disabled></div>
+        </div>
+        <div class="field" style="margin-bottom:10px"><label>Observação do item (opcional, pra quem vai receber)</label><input type="text" id="modal-ped-item-obs" placeholder="Ex: conferir validade mínima de 6 meses"></div>
         <div class="btn-row" style="justify-content:flex-start"><button class="btn btn-sm btn-dark" onclick="adicionarItemPedido()">+ Adicionar à lista</button></div>
       </div>
     </div>
@@ -2351,7 +2352,7 @@ function selecionarProdutoPedido(produtoId){
   document.getElementById('modal-ped-item-busca').value = produto.descricao;
   document.getElementById('modal-ped-item-autocomplete').style.display = 'none';
   document.getElementById('modal-ped-item-volumes').style.display = 'block';
-  document.getElementById('modal-ped-item-unbase').textContent = produto.unidade;
+  document.getElementById('modal-ped-item-unbase-campo').value = produto.unidade;
   document.getElementById('modal-ped-item-unbase2').textContent = produto.unidade;
   const selUn = document.getElementById('modal-ped-item-unvol');
   selUn.innerHTML = unidades.map(u=>`<option value="${u.sigla}">${u.sigla} — ${u.nome}</option>`).join('');
@@ -2359,21 +2360,20 @@ function selecionarProdutoPedido(produtoId){
   document.getElementById('modal-ped-item-fator').value = 1;
   document.getElementById('modal-ped-item-qtdvol').value = '';
   document.getElementById('modal-ped-item-precovol').value = '';
+  document.getElementById('modal-ped-item-obs').value = '';
   calcularResumoItemPedido();
 }
 function calcularResumoItemPedido(){
   const qtdVol = parseFloat(document.getElementById('modal-ped-item-qtdvol').value) || 0;
   const fator = parseFloat(document.getElementById('modal-ped-item-fator').value) || 0;
   const precoVol = parseFloat(document.getElementById('modal-ped-item-precovol').value) || 0;
-  const unCompra = document.getElementById('modal-ped-item-unvol').value || 'volume';
-  const unBase = produtoItemPedidoSelecionado ? produtoItemPedidoSelecionado.unidade : 'kg';
-  document.getElementById('modal-ped-item-preco-label').textContent = `Preço por ${unCompra} (R$)`;
-  const qtdTotal = qtdVol * fator;
-  const precoBase = qtdTotal > 0 ? (qtdVol*precoVol)/qtdTotal : 0;
-  const subtotal = qtdVol * precoVol;
-  document.getElementById('modal-ped-item-out-qtd').textContent = qtdTotal > 0 ? `${fmtNum(qtdTotal)} ${unBase}` : '—';
-  document.getElementById('modal-ped-item-out-preco').textContent = precoBase > 0 ? `${fmtMoeda(precoBase)} / ${unBase}` : '—';
-  document.getElementById('modal-ped-item-out-total').textContent = subtotal > 0 ? fmtMoeda(subtotal) : '—';
+  const unCompra = document.getElementById('modal-ped-item-unvol').value || 'unidade';
+
+  document.getElementById('modal-ped-item-equiv-label').textContent = `1 ${unCompra} equivale a*`;
+  const qtdBase = qtdVol * fator;
+  const valorTotal = qtdVol * precoVol;
+  document.getElementById('modal-ped-item-out-qtd-campo').value = qtdBase ? fmtNum(qtdBase) : '';
+  document.getElementById('modal-ped-item-out-total-campo').value = valorTotal ? fmtMoeda(valorTotal) : '';
 }
 function adicionarItemPedido(){
   if(!produtoItemPedidoSelecionado){ toast('Busque e selecione um produto'); return; }
@@ -2381,7 +2381,8 @@ function adicionarItemPedido(){
   const fator = parseFloat(document.getElementById('modal-ped-item-fator').value);
   const precoVol = parseFloat(document.getElementById('modal-ped-item-precovol').value);
   const unCompra = document.getElementById('modal-ped-item-unvol').value;
-  if(!qtdVol || !fator || !precoVol){ toast('Preencha quantidade, tamanho do volume e preço'); return; }
+  const observacao = document.getElementById('modal-ped-item-obs').value.trim();
+  if(!qtdVol || !fator || !precoVol){ toast('Preencha quantidade, equivalência e valor unitário'); return; }
 
   itensNovoPedido.push({
     produto_id: produtoItemPedidoSelecionado.id,
@@ -2390,7 +2391,8 @@ function adicionarItemPedido(){
     quantidade_comprada: qtdVol,
     unidade_compra: unCompra,
     fator_conversao: fator,
-    preco_unidade_compra: precoVol
+    preco_unidade_compra: precoVol,
+    observacao: observacao || null
   });
 
   produtoItemPedidoSelecionado = null;
@@ -2409,7 +2411,8 @@ function renderItensNovoPedido(){
     return `<div class="item-pedido-row">
       <div>
         <div class="item-desc">${it.descricao}</div>
-        <div class="item-detalhe">${fmtNum(it.quantidade_comprada)} ${it.unidade_compra} de ${fmtNum(it.fator_conversao)} ${it.unidade_base} = ${fmtNum(qtdTotal)} ${it.unidade_base} · ${fmtMoeda(it.preco_unidade_compra)}/${it.unidade_compra} · total ${fmtMoeda(subtotal)}</div>
+        <div class="item-detalhe">${fmtNum(it.quantidade_comprada)} ${it.unidade_compra} (1 ${it.unidade_compra} = ${fmtNum(it.fator_conversao)} ${it.unidade_base}) = ${fmtNum(qtdTotal)} ${it.unidade_base} · ${fmtMoeda(it.preco_unidade_compra)} · total ${fmtMoeda(subtotal)}</div>
+        ${it.observacao ? `<div class="item-detalhe" style="color:var(--brand-dark)">Obs: ${it.observacao}</div>` : ''}
       </div>
       <button class="btn-icon" onclick="removerItemPedido(${i})">⊘</button>
     </div>`;
@@ -2419,12 +2422,14 @@ function renderItensNovoPedido(){
 }
 async function salvarNovoPedido(){
   const data_entrega_prevista = document.getElementById('modal-ped-entrega').value;
+  const obs = document.getElementById('modal-ped-obs').value.trim();
   if(!fornecedorNovoPedidoSelecionado){ toast('Busque e selecione o fornecedor'); return; }
   if(itensNovoPedido.length === 0){ toast('Adicione ao menos um item'); return; }
   try{
     await api('/api/pedidos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
       fornecedor_id: fornecedorNovoPedidoSelecionado,
       data_entrega_prevista: data_entrega_prevista||null,
+      obs: obs || null,
       itens: itensNovoPedido
     }) });
     toast('✓ Pedido gerado');
@@ -2437,11 +2442,12 @@ async function verPedido(id){
     const p = await api(`/api/pedidos/${id}`);
     abrirModal(`Pedido #${String(p.id).padStart(4,'0')} — ${p.fornecedor_nome||''}`, `
       <p style="font-size:12px;color:#888;margin-bottom:10px">Entrega prevista: ${fmtData(p.data_entrega_prevista)} · Status: ${PEDIDO_STATUS_LABEL[p.status]}</p>
+      ${p.obs ? `<div class="warn-box" style="margin-bottom:12px"><strong>Observações do pedido:</strong> ${p.obs}</div>` : ''}
       <table style="width:100%;font-size:12px;margin-bottom:12px">
-        <thead><tr><th>Produto</th><th>Volumes</th><th>Total pedido</th><th>Recebido</th><th>Preço/volume</th></tr></thead>
+        <thead><tr><th>Produto</th><th>Volumes</th><th>Total pedido</th><th>Recebido</th><th>Valor unit.</th></tr></thead>
         <tbody>${p.itens.map(it => `<tr>
-          <td>${it.produto_descricao}</td>
-          <td>${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' de '+fmtNum(it.fator_conversao)+' '+it.unidade : '—'}</td>
+          <td>${it.produto_descricao}${it.observacao ? `<div style="color:var(--brand-dark);font-size:11px">Obs: ${it.observacao}</div>` : ''}</td>
+          <td>${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' (1='+fmtNum(it.fator_conversao)+' '+it.unidade+')' : '—'}</td>
           <td>${fmtNum(it.quantidade_pedida)} ${it.unidade}</td>
           <td>${fmtNum(it.quantidade_recebida)} ${it.unidade}</td>
           <td>${it.preco_unidade_compra ? fmtMoeda(it.preco_unidade_compra) : fmtMoeda(it.preco_unitario)}</td>
@@ -2467,15 +2473,17 @@ async function exportarPedidoPDF(id){
     area.innerHTML = `
       <div style="padding:12mm;font-family:sans-serif">
         <h2>Pedido de Compra #${String(p.id).padStart(4,'0')}</h2>
-        <p style="color:#666;font-size:12px;margin-bottom:14px">Fornecedor: ${p.fornecedor_nome||'—'} · Entrega prevista: ${fmtData(p.data_entrega_prevista)} · Gerado em ${fmtData(p.data_pedido)}</p>
+        <p style="color:#666;font-size:12px;margin-bottom:8px">Fornecedor: ${p.fornecedor_nome||'—'} · Entrega prevista: ${fmtData(p.data_entrega_prevista)} · Gerado em ${fmtData(p.data_pedido)}</p>
+        ${p.obs ? `<p style="font-size:12px;margin-bottom:14px"><strong>Observações:</strong> ${p.obs}</p>` : ''}
         <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr>${['Produto','Volumes','Quantidade total','Preço/volume','Subtotal'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:6px">${h}</th>`).join('')}</tr></thead>
+          <thead><tr>${['Produto','Volumes','Quantidade total','Valor unit.','Subtotal','Observação'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:6px">${h}</th>`).join('')}</tr></thead>
           <tbody>${p.itens.map(it => `<tr>${[
             it.produto_descricao,
-            it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' de '+fmtNum(it.fator_conversao)+' '+it.unidade : '—',
+            it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' (1='+fmtNum(it.fator_conversao)+' '+it.unidade+')' : '—',
             fmtNum(it.quantidade_pedida)+' '+it.unidade,
             it.preco_unidade_compra ? fmtMoeda(it.preco_unidade_compra) : fmtMoeda(it.preco_unitario),
-            fmtMoeda(it.quantidade_pedida*it.preco_unitario)
+            fmtMoeda(it.quantidade_pedida*it.preco_unitario),
+            it.observacao || '—'
           ].map(v=>`<td style="padding:6px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody>
         </table>
         <p style="text-align:right;margin-top:12px;font-size:14px">Total: <b>${fmtMoeda(p.valor_total)}</b></p>
@@ -2544,12 +2552,15 @@ async function abrirRecebimento(pedidoId){
     document.getElementById('receber-lista-pedidos-card').style.display = 'none';
     document.getElementById('receber-detalhe-card').style.display = 'block';
     document.getElementById('receber-pedido-titulo').textContent = `Recebendo pedido #${String(pedidoRecebendo.id).padStart(4,'0')} — ${pedidoRecebendo.fornecedor_nome||''}`;
-    document.getElementById('receber-itens-lista').innerHTML = pedidoRecebendo.itens.map(it => {
+    const obsGeralHtml = pedidoRecebendo.obs
+      ? `<div class="warn-box" style="margin-bottom:12px"><strong>Observações do pedido:</strong> ${pedidoRecebendo.obs}</div>` : '';
+    document.getElementById('receber-itens-lista').innerHTML = obsGeralHtml + pedidoRecebendo.itens.map(it => {
       const falta = parseFloat(it.quantidade_pedida) - parseFloat(it.quantidade_recebida||0);
       return `<div class="item-row" data-item-id="${it.id}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:8px">
       <div>
         <b>${it.produto_descricao}</b>
-        <div style="color:#888;font-size:12px">Pedido: ${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' de '+fmtNum(it.fator_conversao)+' '+it.unidade+' = ' : ''}${fmtNum(it.quantidade_pedida)} ${it.unidade} · já recebido: ${fmtNum(it.quantidade_recebida||0)} ${it.unidade}</div>
+        <div style="color:#888;font-size:12px">Pedido: ${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' (1='+fmtNum(it.fator_conversao)+' '+it.unidade+') = ' : ''}${fmtNum(it.quantidade_pedida)} ${it.unidade} · já recebido: ${fmtNum(it.quantidade_recebida||0)} ${it.unidade}</div>
+        ${it.observacao ? `<div style="color:var(--brand-dark);font-size:12px;margin-top:2px">⚠ ${it.observacao}</div>` : ''}
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <input type="text" class="receber-codigo" placeholder="Código de barras*" style="width:130px">

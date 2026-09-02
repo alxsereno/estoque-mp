@@ -847,10 +847,10 @@ app.post('/api/pedidos', requireGestor, async (req, res) => {
       await client.query(
         `INSERT INTO pedido_itens
           (pedido_id, produto_id, quantidade_pedida, unidade, preco_unitario,
-           quantidade_comprada, unidade_compra, fator_conversao, preco_unidade_compra)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           quantidade_comprada, unidade_compra, fator_conversao, preco_unidade_compra, observacao)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [pedido.id, it.produto_id, quantidadePedida, unidadeBase, precoUnitario,
-         qtdComprada, it.unidade_compra || unidadeBase, fator, precoUnCompra]
+         qtdComprada, it.unidade_compra || unidadeBase, fator, precoUnCompra, it.observacao || null]
       );
     }
 
