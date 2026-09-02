@@ -264,6 +264,7 @@ ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS quantidade_comprada NUMERIC(12
 ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS unidade_compra VARCHAR(20);
 ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS fator_conversao NUMERIC(12,4) DEFAULT 1;
 ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS preco_unidade_compra NUMERIC(12,4);
+ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS observacao TEXT;
 ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS quantidade_recebida NUMERIC(12,4) DEFAULT 0;
 ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS lote_id INTEGER REFERENCES lotes(id);
 ALTER TABLE pedido_itens ADD COLUMN IF NOT EXISTS codigo_barras_conferido VARCHAR(80);
