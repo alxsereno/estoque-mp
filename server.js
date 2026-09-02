@@ -824,7 +824,9 @@ app.post('/api/pedidos', requireGestor, async (req, res) => {
   try {
     await client.query('BEGIN');
     let valorTotal = 0;
-    itens.forEach(it => { valorTotal += (parseFloat(it.quantidade_pedida)||0) * (parseFloat(it.preco_unitario)||0); });
+    itens.forEach(it => {
+      valorTotal += (parseFloat(it.quantidade_comprada)||0) * (parseFloat(it.preco_unidade_compra)||0);
+    });
 
     const pedRes = await client.query(
       `INSERT INTO pedidos_compra (fornecedor_id, data_entrega_prevista, obs, valor_total, criado_por, status)
@@ -834,13 +836,21 @@ app.post('/api/pedidos', requireGestor, async (req, res) => {
     const pedido = pedRes.rows[0];
 
     for(const it of itens){
-      if(!it.produto_id || !it.quantidade_pedida) continue;
+      const qtdComprada = parseFloat(it.quantidade_comprada);
+      const fator = parseFloat(it.fator_conversao) || 1;
+      const precoUnCompra = parseFloat(it.preco_unidade_compra) || 0;
+      if(!it.produto_id || !qtdComprada) continue;
       const prodRes = await client.query(`SELECT unidade FROM produtos WHERE id=$1`, [it.produto_id]);
-      const unidade = prodRes.rows[0] ? prodRes.rows[0].unidade : (it.unidade || 'kg');
+      const unidadeBase = prodRes.rows[0] ? prodRes.rows[0].unidade : 'kg';
+      const quantidadePedida = qtdComprada * fator;
+      const precoUnitario = fator > 0 ? precoUnCompra / fator : precoUnCompra;
       await client.query(
-        `INSERT INTO pedido_itens (pedido_id, produto_id, quantidade_pedida, unidade, preco_unitario)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [pedido.id, it.produto_id, it.quantidade_pedida, unidade, it.preco_unitario || null]
+        `INSERT INTO pedido_itens
+          (pedido_id, produto_id, quantidade_pedida, unidade, preco_unitario,
+           quantidade_comprada, unidade_compra, fator_conversao, preco_unidade_compra)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [pedido.id, it.produto_id, quantidadePedida, unidadeBase, precoUnitario,
+         qtdComprada, it.unidade_compra || unidadeBase, fator, precoUnCompra]
       );
     }
 
@@ -920,9 +930,12 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
       if(itemRes.rows.length === 0) continue;
       const item = itemRes.rows[0];
       const codigo = String(it.codigo_barras).trim();
+      const fatorItem = parseFloat(item.fator_conversao) || 1;
+      const unidadeCompraItem = item.unidade_compra || item.produto_unidade;
 
-      // garante/atualiza a associação código de barras → produto (fator 1,
-      // já que o pedido é feito na unidade base do produto)
+      // garante/atualiza a associação código de barras → produto, usando a
+      // mesma conversão (unidade de compra/fator) definida no pedido —
+      // assim o "Volumes" da tela Estoque continua coerente depois.
       let produtoCodigoId = null;
       const codExistente = await client.query(`SELECT * FROM produto_codigos WHERE codigo_barras=$1`, [codigo]);
       if(codExistente.rows.length > 0){
@@ -930,23 +943,25 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
       } else {
         const novoCod = await client.query(
           `INSERT INTO produto_codigos (codigo_barras, produto_id, fornecedor_id, unidade_compra, fator_conversao)
-           VALUES ($1,$2,$3,$4,1) RETURNING id`,
-          [codigo, item.produto_id, pedido.fornecedor_id, item.produto_unidade]
+           VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+          [codigo, item.produto_id, pedido.fornecedor_id, unidadeCompraItem, fatorItem]
         );
         produtoCodigoId = novoCod.rows[0].id;
       }
 
       const codigoLote = `LOT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${item.produto_codigo}-${Math.floor(Math.random()*900+100)}`;
+      const qtdCompradaLote = qtd / fatorItem;
       const loteRes = await client.query(
         `INSERT INTO lotes
           (codigo_lote, produto_id, produto_codigo_id, fornecedor_id,
            quantidade_comprada, unidade_compra, fator_conversao,
            quantidade_total, quantidade_atual, unidade,
            data_validade, preco_unitario, possui_codigo_barras, status, origem)
-         VALUES ($1,$2,$3,$4,$5,$6,1,$5,$5,$6,$7,$8,TRUE,'disponivel','pedido')
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,$11,TRUE,'disponivel','pedido')
          RETURNING *`,
         [codigoLote, item.produto_id, produtoCodigoId, pedido.fornecedor_id,
-         qtd, item.produto_unidade, it.data_validade || null, item.preco_unitario]
+         qtdCompradaLote, unidadeCompraItem, fatorItem, qtd, item.produto_unidade,
+         it.data_validade || null, item.preco_unitario]
       );
       const lote = loteRes.rows[0];
 

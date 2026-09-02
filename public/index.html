@@ -122,6 +122,12 @@ tr:hover td{background:#fafaf7}
 .etiqueta-100x60{width:100mm;height:60mm;padding:4mm;box-sizing:border-box;font-family:sans-serif;overflow:hidden;display:flex;flex-direction:column;justify-content:center;page:etiqueta}
 .modal-overlay{position:fixed;inset:0;background:rgba(20,20,18,.45);display:flex;align-items:center;justify-content:center;z-index:2000}
 .modal-box{background:#fff;border-radius:12px;padding:24px;width:520px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal-box-lg{width:820px}
+.busca-inline{position:relative}
+.busca-inline .autocomplete{right:0}
+.item-pedido-row{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border:1px solid #eee;border-radius:8px;margin-bottom:6px;font-size:13px}
+.item-pedido-row .item-desc{font-weight:500}
+.item-pedido-row .item-detalhe{color:#888;font-size:12px;margin-top:2px}
 .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
 .modal-header h2{font-size:16px;font-weight:600}
 .modal-close{cursor:pointer;color:#aaa;font-size:20px;line-height:1;background:none;border:none}
@@ -802,10 +808,11 @@ function toast(msg){
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2800);
 }
-function abrirModal(titulo, innerHtml){
+function abrirModal(titulo, innerHtml, opts){
+  const largo = opts && opts.largo;
   document.getElementById('modal-root').innerHTML = `
     <div class="modal-overlay" onclick="if(event.target===this) fecharModal()">
-      <div class="modal-box">
+      <div class="modal-box${largo ? ' modal-box-lg' : ''}">
         <div class="modal-header"><h2>${titulo}</h2><button class="modal-close" onclick="fecharModal()">✕</button></div>
         ${innerHtml}
       </div>
@@ -1065,6 +1072,14 @@ function selecionarProdutoParaAssociar(id, descricao){
 document.addEventListener('click', e => {
   if(!e.target.closest('#ent-select-produto-busca') && !e.target.closest('#ent-select-produto-autocomplete')){
     const dd = document.getElementById('ent-select-produto-autocomplete');
+    if(dd) dd.style.display = 'none';
+  }
+  if(!e.target.closest('#modal-ped-fornecedor-busca') && !e.target.closest('#modal-ped-fornecedor-autocomplete')){
+    const dd = document.getElementById('modal-ped-fornecedor-autocomplete');
+    if(dd) dd.style.display = 'none';
+  }
+  if(!e.target.closest('#modal-ped-item-busca') && !e.target.closest('#modal-ped-item-autocomplete')){
+    const dd = document.getElementById('modal-ped-item-autocomplete');
     if(dd) dd.style.display = 'none';
   }
 });
@@ -2253,39 +2268,134 @@ async function carregarPedidos(){
 }
 
 let itensNovoPedido = [];
+let fornecedorNovoPedidoSelecionado = null;
+let produtoItemPedidoSelecionado = null;
+
 function abrirNovoPedido(){
   itensNovoPedido = [];
+  fornecedorNovoPedidoSelecionado = null;
+  produtoItemPedidoSelecionado = null;
   abrirModal('Novo pedido de compra', `
-    <div class="grid2" style="margin-bottom:12px">
-      <div class="field"><label>Fornecedor*</label><select id="modal-ped-fornecedor"><option value="">Selecione...</option>${fornecedores.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('')}</select></div>
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="field busca-inline">
+        <label>Fornecedor*</label>
+        <input type="text" id="modal-ped-fornecedor-busca" placeholder="Digite o nome do fornecedor..." autocomplete="off" oninput="buscarFornecedorPedido(this.value)">
+        <div class="autocomplete" id="modal-ped-fornecedor-autocomplete"></div>
+      </div>
       <div class="field"><label>Entrega prevista</label><input type="date" id="modal-ped-entrega"></div>
     </div>
-    <label style="display:block;margin-bottom:6px">Itens</label>
-    <div class="grid3" style="margin-bottom:8px">
-      <select id="modal-ped-item-produto">${produtos.map(p=>`<option value="${p.id}">${p.codigo} — ${p.descricao}</option>`).join('')}</select>
-      <input type="number" id="modal-ped-item-qtd" placeholder="Quantidade" step="0.0001">
-      <input type="number" id="modal-ped-item-preco" placeholder="Preço unit. (R$)" step="0.0001">
+
+    <label style="display:block;margin-bottom:8px">Adicionar item</label>
+    <div class="card" style="background:#f8f8f5;padding:14px;margin-bottom:14px">
+      <div class="field busca-inline" style="margin-bottom:10px">
+        <label>Produto</label>
+        <input type="text" id="modal-ped-item-busca" placeholder="Digite o nome ou código do produto..." autocomplete="off" oninput="buscarProdutoPedido(this.value)">
+        <div class="autocomplete" id="modal-ped-item-autocomplete"></div>
+      </div>
+      <div id="modal-ped-item-volumes" style="display:none">
+        <div class="grid3" style="margin-bottom:10px">
+          <div class="field"><label>Quantidade de volumes</label><input type="number" id="modal-ped-item-qtdvol" step="0.0001" placeholder="Ex: 5" oninput="calcularResumoItemPedido()"></div>
+          <div class="field"><label>Unidade de compra</label><select id="modal-ped-item-unvol" onchange="calcularResumoItemPedido()"></select></div>
+          <div class="field"><label>Tamanho do volume (<span id="modal-ped-item-unbase">kg</span>)</label><input type="number" id="modal-ped-item-fator" step="0.0001" placeholder="Ex: 5" oninput="calcularResumoItemPedido()"></div>
+        </div>
+        <div class="field" style="margin-bottom:10px"><label id="modal-ped-item-preco-label">Preço por volume (R$)</label><input type="number" id="modal-ped-item-precovol" step="0.0001" placeholder="Ex: 10,00" oninput="calcularResumoItemPedido()"></div>
+        <div style="background:var(--brand-soft);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px">
+          <div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#666">Quantidade total</span><b id="modal-ped-item-out-qtd">—</b></div>
+          <div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#666">Preço por <span id="modal-ped-item-unbase2">kg</span></span><b id="modal-ped-item-out-preco">—</b></div>
+          <div style="display:flex;justify-content:space-between;padding:2px 0;border-top:1px solid #cfe6d4;margin-top:2px"><span style="color:var(--brand-dark)">Subtotal do item</span><b style="color:var(--brand-dark)" id="modal-ped-item-out-total">—</b></div>
+        </div>
+        <div class="btn-row" style="justify-content:flex-start"><button class="btn btn-sm btn-dark" onclick="adicionarItemPedido()">+ Adicionar à lista</button></div>
+      </div>
     </div>
-    <div class="btn-row" style="justify-content:flex-start;margin-bottom:10px">
-      <button class="btn btn-sm" onclick="adicionarItemPedido()">+ Adicionar item</button>
-    </div>
+
+    <label style="display:block;margin-bottom:8px">Itens do pedido</label>
     <div id="modal-ped-itens-lista" style="margin-bottom:10px"></div>
-    <div style="text-align:right;font-size:14px;margin-bottom:14px">Total estimado: <b id="modal-ped-total">R$ 0,00</b></div>
+    <div style="text-align:right;font-size:15px;margin-bottom:14px">Total do pedido: <b id="modal-ped-total">R$ 0,00</b></div>
     <div class="btn-row">
       <button class="btn" onclick="fecharModal()">Cancelar</button>
       <button class="btn btn-dark" onclick="salvarNovoPedido()">Gerar pedido</button>
     </div>
-  `);
+  `, {largo:true});
+}
+
+function buscarFornecedorPedido(q){
+  const dd = document.getElementById('modal-ped-fornecedor-autocomplete');
+  fornecedorNovoPedidoSelecionado = null;
+  q = q.trim();
+  if(!q || q.length < 2){ dd.style.display = 'none'; return; }
+  const ql = q.toLowerCase();
+  const achados = fornecedores.filter(f => f.nome.toLowerCase().includes(ql)).slice(0,8);
+  if(achados.length === 0){ dd.style.display = 'none'; return; }
+  dd.innerHTML = achados.map(f => `<div class="ac-item" onclick="selecionarFornecedorPedido(${f.id},'${f.nome.replace(/'/g,"\\'")}')">${f.nome}</div>`).join('');
+  dd.style.display = 'block';
+}
+function selecionarFornecedorPedido(id, nome){
+  fornecedorNovoPedidoSelecionado = id;
+  document.getElementById('modal-ped-fornecedor-busca').value = nome;
+  document.getElementById('modal-ped-fornecedor-autocomplete').style.display = 'none';
+}
+
+function buscarProdutoPedido(q){
+  const dd = document.getElementById('modal-ped-item-autocomplete');
+  q = q.trim();
+  if(!q || q.length < 2){ dd.style.display = 'none'; return; }
+  const ql = q.toLowerCase();
+  const achados = produtos.filter(p => p.codigo.toLowerCase().includes(ql) || p.descricao.toLowerCase().includes(ql)).slice(0,8);
+  if(achados.length === 0){ dd.style.display = 'none'; return; }
+  dd.innerHTML = achados.map(p => `<div class="ac-item" onclick="selecionarProdutoPedido(${p.id})">${p.descricao}<span class="ac-cod">${p.codigo}${p.categoria?' · '+p.categoria:''}</span></div>`).join('');
+  dd.style.display = 'block';
+}
+function selecionarProdutoPedido(produtoId){
+  const produto = produtos.find(p => p.id === produtoId);
+  produtoItemPedidoSelecionado = produto;
+  document.getElementById('modal-ped-item-busca').value = produto.descricao;
+  document.getElementById('modal-ped-item-autocomplete').style.display = 'none';
+  document.getElementById('modal-ped-item-volumes').style.display = 'block';
+  document.getElementById('modal-ped-item-unbase').textContent = produto.unidade;
+  document.getElementById('modal-ped-item-unbase2').textContent = produto.unidade;
+  const selUn = document.getElementById('modal-ped-item-unvol');
+  selUn.innerHTML = unidades.map(u=>`<option value="${u.sigla}">${u.sigla} — ${u.nome}</option>`).join('');
+  selUn.value = produto.unidade;
+  document.getElementById('modal-ped-item-fator').value = 1;
+  document.getElementById('modal-ped-item-qtdvol').value = '';
+  document.getElementById('modal-ped-item-precovol').value = '';
+  calcularResumoItemPedido();
+}
+function calcularResumoItemPedido(){
+  const qtdVol = parseFloat(document.getElementById('modal-ped-item-qtdvol').value) || 0;
+  const fator = parseFloat(document.getElementById('modal-ped-item-fator').value) || 0;
+  const precoVol = parseFloat(document.getElementById('modal-ped-item-precovol').value) || 0;
+  const unCompra = document.getElementById('modal-ped-item-unvol').value || 'volume';
+  const unBase = produtoItemPedidoSelecionado ? produtoItemPedidoSelecionado.unidade : 'kg';
+  document.getElementById('modal-ped-item-preco-label').textContent = `Preço por ${unCompra} (R$)`;
+  const qtdTotal = qtdVol * fator;
+  const precoBase = qtdTotal > 0 ? (qtdVol*precoVol)/qtdTotal : 0;
+  const subtotal = qtdVol * precoVol;
+  document.getElementById('modal-ped-item-out-qtd').textContent = qtdTotal > 0 ? `${fmtNum(qtdTotal)} ${unBase}` : '—';
+  document.getElementById('modal-ped-item-out-preco').textContent = precoBase > 0 ? `${fmtMoeda(precoBase)} / ${unBase}` : '—';
+  document.getElementById('modal-ped-item-out-total').textContent = subtotal > 0 ? fmtMoeda(subtotal) : '—';
 }
 function adicionarItemPedido(){
-  const produtoId = document.getElementById('modal-ped-item-produto').value;
-  const qtd = parseFloat(document.getElementById('modal-ped-item-qtd').value);
-  const preco = parseFloat(document.getElementById('modal-ped-item-preco').value);
-  if(!produtoId || !qtd || !preco){ toast('Preencha produto, quantidade e preço'); return; }
-  const produto = produtos.find(p => p.id == produtoId);
-  itensNovoPedido.push({ produto_id: parseInt(produtoId), descricao: produto.descricao, unidade: produto.unidade, quantidade_pedida: qtd, preco_unitario: preco });
-  document.getElementById('modal-ped-item-qtd').value = '';
-  document.getElementById('modal-ped-item-preco').value = '';
+  if(!produtoItemPedidoSelecionado){ toast('Busque e selecione um produto'); return; }
+  const qtdVol = parseFloat(document.getElementById('modal-ped-item-qtdvol').value);
+  const fator = parseFloat(document.getElementById('modal-ped-item-fator').value);
+  const precoVol = parseFloat(document.getElementById('modal-ped-item-precovol').value);
+  const unCompra = document.getElementById('modal-ped-item-unvol').value;
+  if(!qtdVol || !fator || !precoVol){ toast('Preencha quantidade, tamanho do volume e preço'); return; }
+
+  itensNovoPedido.push({
+    produto_id: produtoItemPedidoSelecionado.id,
+    descricao: produtoItemPedidoSelecionado.descricao,
+    unidade_base: produtoItemPedidoSelecionado.unidade,
+    quantidade_comprada: qtdVol,
+    unidade_compra: unCompra,
+    fator_conversao: fator,
+    preco_unidade_compra: precoVol
+  });
+
+  produtoItemPedidoSelecionado = null;
+  document.getElementById('modal-ped-item-busca').value = '';
+  document.getElementById('modal-ped-item-volumes').style.display = 'none';
   renderItensNovoPedido();
 }
 function removerItemPedido(i){
@@ -2293,21 +2403,30 @@ function removerItemPedido(i){
   renderItensNovoPedido();
 }
 function renderItensNovoPedido(){
-  document.getElementById('modal-ped-itens-lista').innerHTML = itensNovoPedido.map((it,i) => `
-    <div style="display:flex;justify-content:space-between;padding:6px 10px;border:1px solid #eee;border-radius:7px;margin-bottom:5px;font-size:12px">
-      <span>${it.descricao} — ${fmtNum(it.quantidade_pedida)} ${it.unidade} × ${fmtMoeda(it.preco_unitario)}</span>
+  document.getElementById('modal-ped-itens-lista').innerHTML = itensNovoPedido.map((it,i) => {
+    const qtdTotal = it.quantidade_comprada * it.fator_conversao;
+    const subtotal = it.quantidade_comprada * it.preco_unidade_compra;
+    return `<div class="item-pedido-row">
+      <div>
+        <div class="item-desc">${it.descricao}</div>
+        <div class="item-detalhe">${fmtNum(it.quantidade_comprada)} ${it.unidade_compra} de ${fmtNum(it.fator_conversao)} ${it.unidade_base} = ${fmtNum(qtdTotal)} ${it.unidade_base} · ${fmtMoeda(it.preco_unidade_compra)}/${it.unidade_compra} · total ${fmtMoeda(subtotal)}</div>
+      </div>
       <button class="btn-icon" onclick="removerItemPedido(${i})">⊘</button>
-    </div>`).join('');
-  const total = itensNovoPedido.reduce((s,it)=>s+it.quantidade_pedida*it.preco_unitario, 0);
+    </div>`;
+  }).join('') || '<p style="color:#aaa;font-size:12px">Nenhum item adicionado ainda</p>';
+  const total = itensNovoPedido.reduce((s,it)=>s + it.quantidade_comprada*it.preco_unidade_compra, 0);
   document.getElementById('modal-ped-total').textContent = fmtMoeda(total);
 }
 async function salvarNovoPedido(){
-  const fornecedor_id = document.getElementById('modal-ped-fornecedor').value;
   const data_entrega_prevista = document.getElementById('modal-ped-entrega').value;
-  if(!fornecedor_id){ toast('Selecione o fornecedor'); return; }
+  if(!fornecedorNovoPedidoSelecionado){ toast('Busque e selecione o fornecedor'); return; }
   if(itensNovoPedido.length === 0){ toast('Adicione ao menos um item'); return; }
   try{
-    await api('/api/pedidos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fornecedor_id, data_entrega_prevista: data_entrega_prevista||null, itens: itensNovoPedido }) });
+    await api('/api/pedidos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      fornecedor_id: fornecedorNovoPedidoSelecionado,
+      data_entrega_prevista: data_entrega_prevista||null,
+      itens: itensNovoPedido
+    }) });
     toast('✓ Pedido gerado');
     fecharModal();
     carregarPedidos();
@@ -2319,12 +2438,18 @@ async function verPedido(id){
     abrirModal(`Pedido #${String(p.id).padStart(4,'0')} — ${p.fornecedor_nome||''}`, `
       <p style="font-size:12px;color:#888;margin-bottom:10px">Entrega prevista: ${fmtData(p.data_entrega_prevista)} · Status: ${PEDIDO_STATUS_LABEL[p.status]}</p>
       <table style="width:100%;font-size:12px;margin-bottom:12px">
-        <thead><tr><th>Produto</th><th>Pedido</th><th>Recebido</th><th>Preço unit.</th></tr></thead>
-        <tbody>${p.itens.map(it => `<tr><td>${it.produto_descricao}</td><td>${fmtNum(it.quantidade_pedida)} ${it.unidade}</td><td>${fmtNum(it.quantidade_recebida)} ${it.unidade}</td><td>${fmtMoeda(it.preco_unitario)}</td></tr>`).join('')}</tbody>
+        <thead><tr><th>Produto</th><th>Volumes</th><th>Total pedido</th><th>Recebido</th><th>Preço/volume</th></tr></thead>
+        <tbody>${p.itens.map(it => `<tr>
+          <td>${it.produto_descricao}</td>
+          <td>${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' de '+fmtNum(it.fator_conversao)+' '+it.unidade : '—'}</td>
+          <td>${fmtNum(it.quantidade_pedida)} ${it.unidade}</td>
+          <td>${fmtNum(it.quantidade_recebida)} ${it.unidade}</td>
+          <td>${it.preco_unidade_compra ? fmtMoeda(it.preco_unidade_compra) : fmtMoeda(it.preco_unitario)}</td>
+        </tr>`).join('')}</tbody>
       </table>
       <div style="text-align:right;font-size:14px;margin-bottom:14px">Total: <b>${fmtMoeda(p.valor_total)}</b></div>
       <div class="btn-row"><button class="btn" onclick="fecharModal()">Fechar</button></div>
-    `);
+    `, {largo:true});
   }catch(e){ toast('Erro: '+e.message); }
 }
 async function fecharPedido(id){
@@ -2344,8 +2469,14 @@ async function exportarPedidoPDF(id){
         <h2>Pedido de Compra #${String(p.id).padStart(4,'0')}</h2>
         <p style="color:#666;font-size:12px;margin-bottom:14px">Fornecedor: ${p.fornecedor_nome||'—'} · Entrega prevista: ${fmtData(p.data_entrega_prevista)} · Gerado em ${fmtData(p.data_pedido)}</p>
         <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr>${['Produto','Quantidade','Preço unit.','Subtotal'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:6px">${h}</th>`).join('')}</tr></thead>
-          <tbody>${p.itens.map(it => `<tr>${[it.produto_descricao, fmtNum(it.quantidade_pedida)+' '+it.unidade, fmtMoeda(it.preco_unitario), fmtMoeda(it.quantidade_pedida*it.preco_unitario)].map(v=>`<td style="padding:6px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody>
+          <thead><tr>${['Produto','Volumes','Quantidade total','Preço/volume','Subtotal'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:6px">${h}</th>`).join('')}</tr></thead>
+          <tbody>${p.itens.map(it => `<tr>${[
+            it.produto_descricao,
+            it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' de '+fmtNum(it.fator_conversao)+' '+it.unidade : '—',
+            fmtNum(it.quantidade_pedida)+' '+it.unidade,
+            it.preco_unidade_compra ? fmtMoeda(it.preco_unidade_compra) : fmtMoeda(it.preco_unitario),
+            fmtMoeda(it.quantidade_pedida*it.preco_unitario)
+          ].map(v=>`<td style="padding:6px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody>
         </table>
         <p style="text-align:right;margin-top:12px;font-size:14px">Total: <b>${fmtMoeda(p.valor_total)}</b></p>
       </div>`;
@@ -2418,7 +2549,7 @@ async function abrirRecebimento(pedidoId){
       return `<div class="item-row" data-item-id="${it.id}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:8px">
       <div>
         <b>${it.produto_descricao}</b>
-        <div style="color:#888;font-size:12px">Pedido: ${fmtNum(it.quantidade_pedida)} ${it.unidade} · já recebido: ${fmtNum(it.quantidade_recebida||0)} ${it.unidade}</div>
+        <div style="color:#888;font-size:12px">Pedido: ${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' de '+fmtNum(it.fator_conversao)+' '+it.unidade+' = ' : ''}${fmtNum(it.quantidade_pedida)} ${it.unidade} · já recebido: ${fmtNum(it.quantidade_recebida||0)} ${it.unidade}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <input type="text" class="receber-codigo" placeholder="Código de barras*" style="width:130px">
