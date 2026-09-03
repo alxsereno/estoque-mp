@@ -2241,13 +2241,14 @@ async function inativarUsuario(id, nome){
 }
 
 // ═══════════════════════ PEDIDOS DE COMPRA ═══════════════════════
-const PEDIDO_STATUS_LABEL = { aberto:'Aberto', parcial:'Parcial', concluido:'Concluído', cancelado:'Cancelado' };
-const PEDIDO_STATUS_BADGE = { aberto:'badge-info', parcial:'badge-warn', concluido:'badge-ok', cancelado:'badge-gray' };
+const PEDIDO_STATUS_LABEL = { aberto:'Aguardando recebimento', parcial:'Recebido parcialmente', concluido:'Recebido', cancelado:'Cancelado' };
+const PEDIDO_STATUS_BADGE = { aberto:'badge-info', parcial:'badge-warn', concluido:'badge-ok', cancelado:'badge-danger' };
 let pedidosCache = [];
 
 async function carregarPedidos(){
   const todos = document.getElementById('ped-mostrar-todos').checked;
   pedidosCache = await api('/api/pedidos' + (todos ? '?todos=1' : ''));
+  const ehGestor = sessaoUsuario.role==='admin' || sessaoUsuario.role==='planejador';
   document.getElementById('ped-tbody').innerHTML = pedidosCache.map(p => `
     <tr>
       <td>#${String(p.id).padStart(4,'0')}</td>
@@ -2259,20 +2260,61 @@ async function carregarPedidos(){
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="verPedido(${p.id})">Ver</button>
         <button class="btn btn-sm" onclick="exportarPedidoPDF(${p.id})">PDF</button>
-        ${(sessaoUsuario.role==='admin'||sessaoUsuario.role==='planejador') && p.status!=='concluido' && p.status!=='cancelado' ? `<button class="btn btn-sm btn-dark" onclick="fecharPedido(${p.id})">Fechar</button>` : ''}
+        ${ehGestor && p.status!=='concluido' && p.status!=='cancelado' ? `<button class="btn btn-sm" onclick="editarPedido(${p.id})">Editar</button>` : ''}
+        ${ehGestor && p.status!=='concluido' && p.status!=='cancelado' ? `<button class="btn btn-sm btn-dark" onclick="fecharPedido(${p.id})">Fechar</button>` : ''}
+        ${ehGestor && p.status!=='cancelado' ? `<button class="btn btn-sm btn-danger" onclick="cancelarPedido(${p.id})">Cancelar</button>` : ''}
       </td>
     </tr>`).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum pedido encontrado</td></tr>';
+}
+
+async function cancelarPedido(id){
+  if(!confirm('Cancelar este pedido de compra? Essa ação não pode ser desfeita.')) return;
+  try{
+    await api(`/api/pedidos/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'cancelado'}) });
+    toast('✓ Pedido cancelado');
+    carregarPedidos();
+  }catch(e){ toast('Erro: '+e.message); }
 }
 
 let itensNovoPedido = [];
 let fornecedorNovoPedidoSelecionado = null;
 let produtoItemPedidoSelecionado = null;
 
+let pedidoEditandoId = null;
+
 function abrirNovoPedido(){
+  pedidoEditandoId = null;
   itensNovoPedido = [];
   fornecedorNovoPedidoSelecionado = null;
   produtoItemPedidoSelecionado = null;
-  abrirModal('Novo pedido de compra', `
+  abrirModal('Novo pedido de compra', montarFormPedido(), {largo:true});
+  document.getElementById('modal-ped-salvar-btn').onclick = salvarNovoPedido;
+}
+
+async function editarPedido(id){
+  try{
+    const p = await api(`/api/pedidos/${id}`);
+    pedidoEditandoId = id;
+    fornecedorNovoPedidoSelecionado = p.fornecedor_id;
+    itensNovoPedido = p.itens.map(it => ({
+      produto_id: it.produto_id, descricao: it.produto_descricao, unidade_base: it.unidade,
+      quantidade_comprada: parseFloat(it.quantidade_comprada), unidade_compra: it.unidade_compra,
+      fator_conversao: parseFloat(it.fator_conversao), preco_unidade_compra: parseFloat(it.preco_unidade_compra),
+      observacao: it.observacao
+    }));
+    produtoItemPedidoSelecionado = null;
+    abrirModal(`Editar pedido #${String(p.id).padStart(4,'0')}`, montarFormPedido(), {largo:true});
+    document.getElementById('modal-ped-fornecedor-busca').value = p.fornecedor_nome || '';
+    document.getElementById('modal-ped-entrega').value = p.data_entrega_prevista ? p.data_entrega_prevista.slice(0,10) : '';
+    document.getElementById('modal-ped-obs').value = p.obs || '';
+    document.getElementById('modal-ped-salvar-btn').textContent = 'Salvar alterações';
+    document.getElementById('modal-ped-salvar-btn').onclick = salvarNovoPedido;
+    renderItensNovoPedido();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+function montarFormPedido(){
+  return `
     <div class="grid2" style="margin-bottom:14px">
       <div class="field busca-inline">
         <label>Fornecedor*</label>
@@ -2291,6 +2333,7 @@ function abrirNovoPedido(){
         <div class="autocomplete" id="modal-ped-item-autocomplete"></div>
       </div>
       <div id="modal-ped-item-volumes" style="display:none">
+        <div id="modal-ped-item-ref-preco" style="display:none;font-size:12px;color:var(--brand-dark);background:var(--brand-soft);border-radius:7px;padding:7px 10px;margin-bottom:10px"></div>
         <div class="grid2" style="margin-bottom:10px;align-items:end">
           <div class="field"><label>Quantidade*</label><input type="number" id="modal-ped-item-qtdvol" step="0.0001" placeholder="Ex: 20" oninput="calcularResumoItemPedido()"></div>
           <div class="field"><label>Unidade de medida</label><select id="modal-ped-item-unvol" onchange="calcularResumoItemPedido()"></select></div>
@@ -2314,9 +2357,9 @@ function abrirNovoPedido(){
     <div style="text-align:right;font-size:15px;margin-bottom:14px">Total do pedido: <b id="modal-ped-total">R$ 0,00</b></div>
     <div class="btn-row">
       <button class="btn" onclick="fecharModal()">Cancelar</button>
-      <button class="btn btn-dark" onclick="salvarNovoPedido()">Gerar pedido</button>
+      <button class="btn btn-dark" id="modal-ped-salvar-btn">Gerar pedido</button>
     </div>
-  `, {largo:true});
+  `;
 }
 
 function buscarFornecedorPedido(q){
@@ -2362,6 +2405,18 @@ function selecionarProdutoPedido(produtoId){
   document.getElementById('modal-ped-item-precovol').value = '';
   document.getElementById('modal-ped-item-obs').value = '';
   calcularResumoItemPedido();
+  mostrarReferenciaPreco(produto.id);
+}
+async function mostrarReferenciaPreco(produtoId){
+  const el = document.getElementById('modal-ped-item-ref-preco');
+  el.style.display = 'none';
+  try{
+    const r = await api(`/api/produtos/${produtoId}/ultimo-lote`);
+    if(r.encontrado){
+      el.textContent = `💡 Último recebido: ${fmtMoeda(r.preco_unitario)}/${r.unidade} em ${fmtData(r.data_entrada)}${r.fornecedor_nome?' — '+r.fornecedor_nome:''}`;
+      el.style.display = 'block';
+    }
+  }catch(e){}
 }
 function calcularResumoItemPedido(){
   const qtdVol = parseFloat(document.getElementById('modal-ped-item-qtdvol').value) || 0;
@@ -2425,14 +2480,20 @@ async function salvarNovoPedido(){
   const obs = document.getElementById('modal-ped-obs').value.trim();
   if(!fornecedorNovoPedidoSelecionado){ toast('Busque e selecione o fornecedor'); return; }
   if(itensNovoPedido.length === 0){ toast('Adicione ao menos um item'); return; }
+  const payload = {
+    fornecedor_id: fornecedorNovoPedidoSelecionado,
+    data_entrega_prevista: data_entrega_prevista||null,
+    obs: obs || null,
+    itens: itensNovoPedido
+  };
   try{
-    await api('/api/pedidos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-      fornecedor_id: fornecedorNovoPedidoSelecionado,
-      data_entrega_prevista: data_entrega_prevista||null,
-      obs: obs || null,
-      itens: itensNovoPedido
-    }) });
-    toast('✓ Pedido gerado');
+    if(pedidoEditandoId){
+      await api(`/api/pedidos/${pedidoEditandoId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      toast('✓ Pedido atualizado');
+    } else {
+      await api('/api/pedidos', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      toast('✓ Pedido gerado');
+    }
     fecharModal();
     carregarPedidos();
   }catch(e){ toast('Erro: '+e.message); }
@@ -2513,6 +2574,12 @@ function renderCronograma(){
   const dom = new Date(seg); dom.setDate(seg.getDate()+6);
   document.getElementById('crono-semana-label').textContent = `${seg.toLocaleDateString('pt-BR')} a ${dom.toLocaleDateString('pt-BR')}`;
 
+  const CRONO_COR = {
+    aberto:    { bg:'#e8f0fe', border:'#1a56db' },
+    parcial:   { bg:'#fff8e1', border:'#b8860b' },
+    concluido: { bg:'#e6f4ea', border:'#1e7e34' },
+    cancelado: { bg:'#fde8e8', border:'#c0392b' }
+  };
   const DIAS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
   document.getElementById('crono-grid').innerHTML = DIAS.map((label,i) => {
     const dia = new Date(seg); dia.setDate(seg.getDate()+i);
@@ -2520,12 +2587,14 @@ function renderCronograma(){
     const pedidosDoDia = pedidosCache.filter(p => p.data_entrega_prevista && p.data_entrega_prevista.slice(0,10) === diaStr);
     return `<div class="crono-dia">
       <div class="crono-dia-label">${label} ${dia.getDate()}/${dia.getMonth()+1}</div>
-      ${pedidosDoDia.map(p => `
-        <div class="crono-card" onclick="verPedido(${p.id})">
+      ${pedidosDoDia.map(p => {
+        const cor = CRONO_COR[p.status] || CRONO_COR.aberto;
+        return `<div class="crono-card" style="background:${cor.bg};border-left:3px solid ${cor.border}" onclick="verPedido(${p.id})">
           <b>#${String(p.id).padStart(4,'0')}</b>
           ${p.fornecedor_nome||''}<br>
           <span class="badge ${PEDIDO_STATUS_BADGE[p.status]}" style="margin-top:3px">${PEDIDO_STATUS_LABEL[p.status]}</span>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>`;
   }).join('');
 }
@@ -2562,11 +2631,11 @@ async function abrirRecebimento(pedidoId){
         <div style="color:#888;font-size:12px">Pedido: ${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' (1='+fmtNum(it.fator_conversao)+' '+it.unidade+') = ' : ''}${fmtNum(it.quantidade_pedida)} ${it.unidade} · já recebido: ${fmtNum(it.quantidade_recebida||0)} ${it.unidade}</div>
         ${it.observacao ? `<div style="color:var(--brand-dark);font-size:12px;margin-top:2px">⚠ ${it.observacao}</div>` : ''}
       </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <input type="text" class="receber-codigo" placeholder="Código de barras*" style="width:130px">
-        <button class="btn btn-sm" title="Escanear">📷</button>
-        <input type="number" class="receber-qtd" placeholder="Qtd. recebida" step="0.0001" value="${falta>0?falta:''}" style="width:100px">
-        <input type="date" class="receber-validade" style="width:130px">
+      <div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap">
+        <div class="field" style="width:140px"><label>Código de barras*</label><input type="text" class="receber-codigo" placeholder="Escaneie ou digite"></div>
+        <button class="btn btn-sm" title="Escanear" style="margin-bottom:1px">📷</button>
+        <div class="field" style="width:100px"><label>Qtd. recebida</label><input type="number" class="receber-qtd" placeholder="Ex: 20" step="0.0001" value="${falta>0?falta:''}"></div>
+        <div class="field" style="width:140px"><label>Data de validade</label><input type="date" class="receber-validade"></div>
       </div>
     </div>`;
     }).join('');

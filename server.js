@@ -322,6 +322,22 @@ app.get('/api/produtos/:id/codigos', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+// Último lote recebido de um produto — usado como referência de preço
+// na hora de montar um novo pedido de compra.
+app.get('/api/produtos/:id/ultimo-lote', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT l.preco_unitario, l.unidade, l.unidade_compra, l.fator_conversao, l.data_entrada, f.nome AS fornecedor_nome
+       FROM lotes l LEFT JOIN fornecedores f ON f.id = l.fornecedor_id
+       WHERE l.produto_id = $1 AND l.preco_unitario IS NOT NULL
+       ORDER BY l.data_entrada DESC, l.id DESC LIMIT 1`,
+      [req.params.id]
+    );
+    if(rows.length === 0) return res.json({ encontrado: false });
+    res.json({ encontrado: true, ...rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 // Associar um novo código de barras a um produto (1º recebimento daquela embalagem)
 app.post('/api/codigos', async (req, res) => {
   const { codigo_barras, produto_id, fornecedor_id, descricao_embalagem, unidade_compra, fator_conversao } = req.body;
@@ -865,14 +881,57 @@ app.post('/api/pedidos', requireGestor, async (req, res) => {
 });
 
 app.put('/api/pedidos/:id', requireGestor, async (req, res) => {
-  const { fornecedor_id, data_entrega_prevista, obs } = req.body;
+  const { fornecedor_id, data_entrega_prevista, obs, itens } = req.body;
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
-      `UPDATE pedidos_compra SET fornecedor_id=$1, data_entrega_prevista=$2, obs=$3 WHERE id=$4 RETURNING *`,
-      [fornecedor_id, data_entrega_prevista || null, obs || null, req.params.id]
-    );
+    await client.query('BEGIN');
+    const atual = await client.query(`SELECT status FROM pedidos_compra WHERE id=$1 FOR UPDATE`, [req.params.id]);
+    if(atual.rows.length === 0) throw new Error('Pedido não encontrado');
+
+    if(Array.isArray(itens)){
+      // só permite trocar os itens se ainda não houve nenhum recebimento —
+      // depois disso os lotes já criados ficariam órfãos/inconsistentes.
+      if(atual.rows[0].status !== 'aberto'){
+        throw new Error('Este pedido já teve recebimento e não pode ter os itens alterados — cancele e crie um novo, se precisar');
+      }
+      let valorTotal = 0;
+      itens.forEach(it => { valorTotal += (parseFloat(it.quantidade_comprada)||0) * (parseFloat(it.preco_unidade_compra)||0); });
+
+      await client.query(`DELETE FROM pedido_itens WHERE pedido_id=$1`, [req.params.id]);
+      for(const it of itens){
+        const qtdComprada = parseFloat(it.quantidade_comprada);
+        const fator = parseFloat(it.fator_conversao) || 1;
+        const precoUnCompra = parseFloat(it.preco_unidade_compra) || 0;
+        if(!it.produto_id || !qtdComprada) continue;
+        const prodRes = await client.query(`SELECT unidade FROM produtos WHERE id=$1`, [it.produto_id]);
+        const unidadeBase = prodRes.rows[0] ? prodRes.rows[0].unidade : 'kg';
+        const quantidadePedida = qtdComprada * fator;
+        const precoUnitario = fator > 0 ? precoUnCompra / fator : precoUnCompra;
+        await client.query(
+          `INSERT INTO pedido_itens
+            (pedido_id, produto_id, quantidade_pedida, unidade, preco_unitario,
+             quantidade_comprada, unidade_compra, fator_conversao, preco_unidade_compra, observacao)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [req.params.id, it.produto_id, quantidadePedida, unidadeBase, precoUnitario,
+           qtdComprada, it.unidade_compra || unidadeBase, fator, precoUnCompra, it.observacao || null]
+        );
+      }
+      await client.query(`UPDATE pedidos_compra SET fornecedor_id=$1, data_entrega_prevista=$2, obs=$3, valor_total=$4 WHERE id=$5`,
+        [fornecedor_id, data_entrega_prevista || null, obs || null, valorTotal, req.params.id]);
+    } else {
+      await client.query(`UPDATE pedidos_compra SET fornecedor_id=$1, data_entrega_prevista=$2, obs=$3 WHERE id=$4`,
+        [fornecedor_id, data_entrega_prevista || null, obs || null, req.params.id]);
+    }
+
+    const { rows } = await client.query(`SELECT * FROM pedidos_compra WHERE id=$1`, [req.params.id]);
+    await client.query('COMMIT');
     res.json({ ok: true, pedido: rows[0] });
-  } catch(e){ res.status(500).json({ error: e.message }); }
+  } catch(e){
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 // Fechar/reabrir/cancelar pedido — só admin ou planejador (mesmo depois do
