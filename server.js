@@ -938,7 +938,7 @@ app.put('/api/pedidos/:id', requireGestor, async (req, res) => {
 // operador ter recebido os itens e o pedido estar "parcial").
 app.patch('/api/pedidos/:id/status', requireGestor, async (req, res) => {
   const { status } = req.body;
-  if(!['aberto','parcial','concluido','cancelado'].includes(status)){
+  if(!['aberto','parcial','recebido','concluido','cancelado'].includes(status)){
     return res.status(400).json({ error: 'Status inválido' });
   }
   try {
@@ -1040,7 +1040,17 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
       );
     }
 
-    await client.query(`UPDATE pedidos_compra SET status='parcial' WHERE id=$1 AND status != 'concluido'`, [req.params.id]);
+    // Recalcula o status a partir do que realmente já foi recebido: se todo
+    // item já bateu (ou passou) a quantidade pedida, o pedido é "recebido"
+    // de verdade — não fica marcado como parcial só porque algum dia teve
+    // uma primeira leva. Fechar de vez (arquivar) continua manual.
+    const itensStatus = await client.query(
+      `SELECT quantidade_pedida, COALESCE(quantidade_recebida,0) AS quantidade_recebida FROM pedido_itens WHERE pedido_id=$1`,
+      [req.params.id]
+    );
+    const totalmenteRecebido = itensStatus.rows.every(r => parseFloat(r.quantidade_recebida) >= parseFloat(r.quantidade_pedida) - 0.0001);
+    const novoStatus = totalmenteRecebido ? 'recebido' : 'parcial';
+    await client.query(`UPDATE pedidos_compra SET status=$1 WHERE id=$2 AND status NOT IN ('concluido','cancelado')`, [novoStatus, req.params.id]);
 
     await client.query('COMMIT');
     res.json({ ok: true });

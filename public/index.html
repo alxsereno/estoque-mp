@@ -567,7 +567,7 @@ tr:hover td{background:#fafaf7}
     </div>
     <div class="card">
       <table>
-        <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. sistema</th><th>Qtd. contada</th><th>Diferença</th></tr></thead>
+        <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. sistema</th><th>Volumes</th><th>Qtd. contada</th><th>Diferença</th></tr></thead>
         <tbody id="inv-tbody"></tbody>
       </table>
       <div class="btn-row">
@@ -2085,15 +2085,20 @@ function renderInventario(){
     (!busca || l.produto_descricao.toLowerCase().includes(busca)) &&
     (!cat || l.categoria === cat)
   );
-  document.getElementById('inv-tbody').innerHTML = filtrado.map(l => `
-    <tr data-lote-id="${l.id}" data-qtd-sistema="${l.quantidade_atual}">
+  document.getElementById('inv-tbody').innerHTML = filtrado.map(l => {
+    const vol = (l.fator_conversao && parseFloat(l.fator_conversao) > 0)
+      ? fmtNum(parseFloat(l.quantidade_atual) / parseFloat(l.fator_conversao)) + ' ' + (l.unidade_compra || '')
+      : '—';
+    return `<tr data-lote-id="${l.id}" data-qtd-sistema="${l.quantidade_atual}">
       <td><span class="lote-tag">${l.codigo_lote}</span></td>
       <td>${l.produto_descricao}</td>
       <td>${catBadge(l.categoria)}</td>
       <td>${fmtNum(l.quantidade_atual)} ${l.unidade}</td>
+      <td>${vol}</td>
       <td><input type="number" step="0.0001" class="ajuste-input inv-contado" placeholder="${fmtNum(l.quantidade_atual)}" oninput="atualizarDiffInventario(this)"></td>
       <td class="inv-diff diff-zero">—</td>
-    </tr>`).join('') || '<tr><td colspan="6" style="color:#aaa;text-align:center;padding:24px">Nenhum lote em estoque</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum lote em estoque</td></tr>';
 }
 function atualizarDiffInventario(input){
   const tr = input.closest('tr');
@@ -2238,8 +2243,8 @@ async function inativarUsuario(id, nome){
 }
 
 // ═══════════════════════ PEDIDOS DE COMPRA ═══════════════════════
-const PEDIDO_STATUS_LABEL = { aberto:'Aguardando recebimento', parcial:'Recebido parcialmente', concluido:'Recebido', cancelado:'Cancelado' };
-const PEDIDO_STATUS_BADGE = { aberto:'badge-info', parcial:'badge-warn', concluido:'badge-ok', cancelado:'badge-danger' };
+const PEDIDO_STATUS_LABEL = { aberto:'Aguardando recebimento', parcial:'Recebido parcialmente', recebido:'Recebido', concluido:'Concluído (arquivado)', cancelado:'Cancelado' };
+const PEDIDO_STATUS_BADGE = { aberto:'badge-info', parcial:'badge-warn', recebido:'badge-ok', concluido:'badge-gray', cancelado:'badge-danger' };
 let pedidosCache = [];
 
 async function carregarPedidos(){
@@ -2257,7 +2262,7 @@ async function carregarPedidos(){
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick="verPedido(${p.id})">Ver</button>
         <button class="btn btn-sm" onclick="exportarPedidoPDF(${p.id})">PDF</button>
-        ${ehGestor && p.status!=='concluido' && p.status!=='cancelado' ? `<button class="btn btn-sm" onclick="editarPedido(${p.id})">Editar</button>` : ''}
+        ${ehGestor && p.status==='aberto' ? `<button class="btn btn-sm" onclick="editarPedido(${p.id})">Editar</button>` : ''}
         ${ehGestor && p.status!=='concluido' && p.status!=='cancelado' ? `<button class="btn btn-sm btn-dark" onclick="fecharPedido(${p.id})">Fechar</button>` : ''}
         ${ehGestor && p.status!=='cancelado' ? `<button class="btn btn-sm btn-danger" onclick="cancelarPedido(${p.id})">Cancelar</button>` : ''}
       </td>
@@ -2574,7 +2579,8 @@ function renderCronograma(){
   const CRONO_COR = {
     aberto:    { bg:'#e8f0fe', border:'#1a56db' },
     parcial:   { bg:'#fff8e1', border:'#b8860b' },
-    concluido: { bg:'#e6f4ea', border:'#1e7e34' },
+    recebido:  { bg:'#e6f4ea', border:'#1e7e34' },
+    concluido: { bg:'#f0f0ea', border:'#888' },
     cancelado: { bg:'#fde8e8', border:'#c0392b' }
   };
   const DIAS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
@@ -2589,6 +2595,7 @@ function renderCronograma(){
         return `<div class="crono-card" style="background:${cor.bg};border-left:3px solid ${cor.border}" onclick="verPedido(${p.id})">
           <b>#${String(p.id).padStart(4,'0')}</b>
           ${p.fornecedor_nome||''}<br>
+          <span style="font-weight:600">${fmtMoeda(p.valor_total)}</span><br>
           <span class="badge ${PEDIDO_STATUS_BADGE[p.status]}" style="margin-top:3px">${PEDIDO_STATUS_LABEL[p.status]}</span>
         </div>`;
       }).join('')}
@@ -2609,7 +2616,10 @@ async function carregarReceberPedido(){
         <span class="badge ${PEDIDO_STATUS_BADGE[p.status]}" style="margin-left:6px">${PEDIDO_STATUS_LABEL[p.status]}</span>
         <div style="color:#888;font-size:12px;margin-top:4px">${p.fornecedor_nome||'—'} · entrega prevista ${fmtData(p.data_entrega_prevista)}</div>
       </div>
-      <div style="font-weight:600">${p.total_itens} item(ns)</div>
+      <div style="text-align:right">
+        <div style="font-weight:600">${fmtMoeda(p.valor_total)}</div>
+        <div style="color:#888;font-size:12px">${p.total_itens} item(ns)</div>
+      </div>
     </div>`).join('') || '<p style="color:#aaa;font-size:13px">Nenhum pedido aguardando recebimento</p>';
 }
 async function abrirRecebimento(pedidoId){
