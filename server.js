@@ -957,7 +957,7 @@ app.patch('/api/pedidos/:id/status', requireGestor, async (req, res) => {
 // grava/atualiza a associação código→produto. O pedido sempre vira
 // "parcial" após qualquer recebimento (só admin/planejador fecham de vez).
 app.post('/api/pedidos/:id/receber', async (req, res) => {
-  const { itens } = req.body; // [{ item_id, codigo_barras, quantidade_recebida, data_validade }]
+  const { itens } = req.body; // [{ item_id, codigo_barras, quantidade_comprada, unidade_compra, fator_conversao, preco_unitario, data_validade }]
   if(!Array.isArray(itens) || itens.length === 0){
     return res.status(400).json({ error: 'Nenhum item para receber' });
   }
@@ -977,8 +977,8 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
     if(['concluido','cancelado'].includes(pedido.status)) throw new Error('Este pedido já foi fechado');
 
     for(const it of itens){
-      const qtd = parseFloat(it.quantidade_recebida);
-      if(!qtd || qtd <= 0) continue;
+      const qtdComprada = parseFloat(it.quantidade_comprada);
+      if(!qtdComprada || qtdComprada <= 0) continue;
 
       const itemRes = await client.query(
         `SELECT pi.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao, p.unidade AS produto_unidade
@@ -989,12 +989,14 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
       if(itemRes.rows.length === 0) continue;
       const item = itemRes.rows[0];
       const codigo = String(it.codigo_barras).trim();
-      const fatorItem = parseFloat(item.fator_conversao) || 1;
-      const unidadeCompraItem = item.unidade_compra || item.produto_unidade;
+      const fatorItem = parseFloat(it.fator_conversao) || parseFloat(item.fator_conversao) || 1;
+      const unidadeCompraItem = it.unidade_compra || item.unidade_compra || item.produto_unidade;
+      const precoUnitario = it.preco_unitario != null ? parseFloat(it.preco_unitario) : item.preco_unitario;
+      const qtd = qtdComprada * fatorItem; // quantidade na unidade base do produto
 
       // garante/atualiza a associação código de barras → produto, usando a
-      // mesma conversão (unidade de compra/fator) definida no pedido —
-      // assim o "Volumes" da tela Estoque continua coerente depois.
+      // conversão confirmada agora no recebimento — assim o "Volumes" da
+      // tela Estoque continua coerente depois.
       let produtoCodigoId = null;
       const codExistente = await client.query(`SELECT * FROM produto_codigos WHERE codigo_barras=$1`, [codigo]);
       if(codExistente.rows.length > 0){
@@ -1009,7 +1011,6 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
       }
 
       const codigoLote = `LOT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${item.produto_codigo}-${Math.floor(Math.random()*900+100)}`;
-      const qtdCompradaLote = qtd / fatorItem;
       const loteRes = await client.query(
         `INSERT INTO lotes
           (codigo_lote, produto_id, produto_codigo_id, fornecedor_id,
@@ -1019,8 +1020,8 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,$11,TRUE,'disponivel','pedido')
          RETURNING *`,
         [codigoLote, item.produto_id, produtoCodigoId, pedido.fornecedor_id,
-         qtdCompradaLote, unidadeCompraItem, fatorItem, qtd, item.produto_unidade,
-         it.data_validade || null, item.preco_unitario]
+         qtdComprada, unidadeCompraItem, fatorItem, qtd, item.produto_unidade,
+         it.data_validade || null, precoUnitario]
       );
       const lote = loteRes.rows[0];
 
@@ -1028,14 +1029,14 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
         `INSERT INTO movimentacoes (data, tipo, lote_id, codigo_lote, produto_id, produto, quantidade, unidade, preco_unitario, valor_total, obs)
          VALUES (CURRENT_DATE,'entrada',$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [lote.id, lote.codigo_lote, item.produto_id, item.produto_descricao, qtd, item.produto_unidade,
-         item.preco_unitario, item.preco_unitario ? item.preco_unitario*qtd : null, `Pedido #${pedido.id}`]
+         precoUnitario, precoUnitario ? precoUnitario*qtd : null, `Pedido #${pedido.id}`]
       );
 
       await client.query(
         `UPDATE pedido_itens SET quantidade_recebida = COALESCE(quantidade_recebida,0) + $1,
-           lote_id=$2, codigo_barras_conferido=$3, data_validade=$4, conferido_por=$5, conferido_em=NOW()
-         WHERE id=$6`,
-        [qtd, lote.id, codigo, it.data_validade || null, req.usuario.id, item.id]
+           preco_unitario=$2, lote_id=$3, codigo_barras_conferido=$4, data_validade=$5, conferido_por=$6, conferido_em=NOW()
+         WHERE id=$7`,
+        [qtd, precoUnitario, lote.id, codigo, it.data_validade || null, req.usuario.id, item.id]
       );
     }
 

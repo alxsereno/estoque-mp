@@ -303,26 +303,30 @@ tr:hover td{background:#fafaf7}
       </div>
 
       <div class="card-title" style="margin-top:18px">3. Quantidade e preço</div>
-      <div class="grid2">
-        <div class="field"><label>Quantidade comprada</label>
+      <div class="grid2" style="align-items:end">
+        <div class="field"><label>Quantidade*</label>
           <input type="number" id="ent-qtd-comprada" step="0.0001" placeholder="Ex: 10" inputmode="decimal">
         </div>
-        <div class="field"><label>Unidade de compra</label>
+        <div class="field"><label>Unidade de medida</label>
           <select id="ent-unidade-compra"></select>
         </div>
       </div>
-      <div class="field" id="ent-fator-wrap" style="margin-top:14px;display:none">
-        <label id="ent-fator-label">Quantos kg tem 1 unidade de compra?</label>
-        <input type="number" id="ent-fator" step="0.0001" placeholder="Ex: 5" inputmode="decimal">
+      <div class="grid3" style="margin-top:10px;align-items:end;grid-template-columns:2fr 1fr 1.4fr">
+        <div class="field"><label id="ent-fator-label">1 unidade equivale a*</label>
+          <input type="number" id="ent-fator" step="0.0001" placeholder="Ex: 5" inputmode="decimal">
+        </div>
+        <div class="field"><label>&nbsp;</label><input type="text" id="ent-unidade-base-campo" disabled></div>
+        <div class="field"><label>Quantidade* (<span id="ent-unidade-base">kg</span>)</label><input type="text" id="ent-out-qtd-campo" disabled></div>
       </div>
-      <div class="field" style="margin-top:14px"><label id="ent-preco-label">Preço pago por unidade comprada (R$)</label>
-        <input type="number" id="ent-preco-pago" step="0.0001" placeholder="Ex: 10,00" inputmode="decimal">
+      <div class="grid2" style="margin-top:10px">
+        <div class="field"><label id="ent-preco-label">Valor unitário (R$)</label>
+          <input type="number" id="ent-preco-pago" step="0.0001" placeholder="Ex: 10,00" inputmode="decimal">
+        </div>
+        <div class="field"><label>Valor total</label><input type="text" id="ent-out-valor-campo" disabled></div>
       </div>
 
-      <div style="background:var(--brand-soft);border-radius:8px;padding:12px 16px;margin-top:16px">
-        <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#666">Quantidade total no estoque</span><b id="ent-out-qtd">—</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#666">Valor total da compra</span><b id="ent-out-valor">—</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:15px;padding:6px 0 0;border-top:1px solid #cfe6d4;margin-top:4px"><span style="color:var(--brand-dark)">Preço por <span id="ent-unidade-base">kg</span> (padrão do estoque)</span><b style="color:var(--brand-dark)" id="ent-out-precokg">—</b></div>
+      <div style="background:var(--brand-soft);border-radius:8px;padding:10px 14px;margin-top:14px;font-size:13px">
+        <div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--brand-dark)">Preço por <span id="ent-unidade-base2">kg</span> (padrão do estoque)</span><b style="color:var(--brand-dark)" id="ent-out-precokg">—</b></div>
       </div>
 
       <div class="warn-box full" style="margin-top:14px" id="ent-sem-codigo-aviso">
@@ -991,6 +995,9 @@ function buscarProdutoLiveEntrada(q){
 }
 
 let codigosProdutoAtualEntrada = [];
+function rotuloEmbalagem(codigoObj, unidadeBase){
+  return `1 ${codigoObj.unidade_compra} = ${fmtNum(codigoObj.fator_conversao)} ${unidadeBase}`;
+}
 async function selecionarProdutoBuscaEntrada(produtoId){
   document.getElementById('ent-autocomplete').style.display = 'none';
   const produto = produtos.find(p => p.id === produtoId);
@@ -1002,11 +1009,11 @@ async function selecionarProdutoBuscaEntrada(produtoId){
     codigosProdutoAtualEntrada = codigos;
     if(codigos.length === 1){
       abrirFormEntrada(produto, codigos[0], codigos[0].codigo_barras);
-      resDiv.innerHTML = `<div class="badge badge-ok">✓ ${produto.descricao} (${codigos[0].descricao_embalagem||codigos[0].unidade_compra})</div>`;
+      resDiv.innerHTML = `<div class="badge badge-ok">✓ ${produto.descricao} (${rotuloEmbalagem(codigos[0], produto.unidade)})</div>`;
     } else if(codigos.length > 1){
       resDiv.innerHTML = `
         <div class="field"><label>Este produto tem mais de uma embalagem cadastrada — qual chegou agora?</label>
-        <select id="ent-select-codigo">${codigos.map(c=>`<option value="${c.id}">${c.descricao_embalagem||c.unidade_compra} (fator ${c.fator_conversao})</option>`).join('')}</select></div>
+        <select id="ent-select-codigo">${codigos.map(c=>`<option value="${c.id}">${rotuloEmbalagem(c, produto.unidade)}${c.descricao_embalagem?' — '+c.descricao_embalagem:''}</option>`).join('')}</select></div>
         <div class="btn-row" style="justify-content:flex-start"><button class="btn btn-sm btn-dark" onclick="confirmarSelecaoCodigoEntrada(${produtoId})">Continuar</button></div>`;
     } else {
       abrirFormEntrada(produto, null, null);
@@ -1182,47 +1189,35 @@ function abrirFormEntrada(produto, codigoInfo, codigoBarras){
   document.getElementById('ent-form-card').style.display = 'block';
   document.getElementById('ent-produto-titulo').textContent = `Fornecedor e nota fiscal — ${produto.descricao}`;
   document.getElementById('ent-unidade-base').textContent = produto.unidade;
+  document.getElementById('ent-unidade-base2').textContent = produto.unidade;
+  document.getElementById('ent-unidade-base-campo').value = produto.unidade;
   // aviso de "código novo" só faz sentido quando de fato veio um código de barras escaneado
   document.getElementById('ent-sem-codigo-aviso').style.display = (!codigoInfo && codigoBarras) ? 'block' : 'none';
 
   const selUnidade = document.getElementById('ent-unidade-compra');
   const campoFator = document.getElementById('ent-fator');
-  const wrapFator = document.getElementById('ent-fator-wrap');
-  if(codigoInfo){
-    document.getElementById('ent-fornecedor').value = codigoInfo.fornecedor_id || '';
-    preencherSelectUnidade(selUnidade, codigoInfo.unidade_compra);
-    campoFator.value = codigoInfo.fator_conversao || '';
-    selUnidade.disabled = true;
-    wrapFator.style.display = 'none';
-  } else {
-    preencherSelectUnidade(selUnidade, '');
-    campoFator.value = '';
-    selUnidade.disabled = false;
-    wrapFator.style.display = 'block';
-    document.getElementById('ent-fator-label').textContent = `Quantos ${produto.unidade} tem 1 unidade de compra?`;
-    campoFator.placeholder = `Ex: 5`;
-  }
+  // A embalagem já cadastrada só entra como sugestão — o operador sempre
+  // pode ajustar aqui (fornecedor pode ter trocado a embalagem, por exemplo).
+  preencherSelectUnidade(selUnidade, codigoInfo ? codigoInfo.unidade_compra : produto.unidade);
+  campoFator.value = codigoInfo ? codigoInfo.fator_conversao : 1;
+  selUnidade.disabled = false;
   calcularResumoEntrada();
 }
 
-function fatorAtual(){
-  if(entradaAtual && entradaAtual.codigoInfo) return parseFloat(entradaAtual.codigoInfo.fator_conversao) || 0;
-  return parseFloat(document.getElementById('ent-fator').value) || 0;
-}
 function calcularResumoEntrada(){
   const qtd = parseFloat(document.getElementById('ent-qtd-comprada').value) || 0;
-  const fator = fatorAtual();
+  const fator = parseFloat(document.getElementById('ent-fator').value) || 0;
   const precoPago = parseFloat(document.getElementById('ent-preco-pago').value) || 0;
-  const unidadeCompra = document.getElementById('ent-unidade-compra').value || 'unidade de compra';
+  const unidadeCompra = document.getElementById('ent-unidade-compra').value || 'unidade';
   const unidadeBase = entradaAtual ? entradaAtual.produto.unidade : 'kg';
 
+  document.getElementById('ent-fator-label').textContent = `1 ${unidadeCompra} equivale a*`;
   const qtdTotal = qtd * fator;
   const valorTotal = qtd * precoPago;
   const precoBase = qtdTotal > 0 ? valorTotal / qtdTotal : 0;
 
-  document.getElementById('ent-preco-label').textContent = `Preço pago por ${unidadeCompra} (R$)`;
-  document.getElementById('ent-out-qtd').textContent = qtdTotal > 0 ? (fmtNum(qtdTotal) + ' ' + unidadeBase) : '—';
-  document.getElementById('ent-out-valor').textContent = valorTotal > 0 ? fmtMoeda(valorTotal) : '—';
+  document.getElementById('ent-out-qtd-campo').value = qtdTotal ? fmtNum(qtdTotal) : '';
+  document.getElementById('ent-out-valor-campo').value = valorTotal ? fmtMoeda(valorTotal) : '';
   document.getElementById('ent-out-precokg').textContent = precoBase > 0 ? (fmtMoeda(precoBase) + ' / ' + unidadeBase) : '—';
 }
 ['ent-qtd-comprada','ent-fator','ent-preco-pago','ent-unidade-compra'].forEach(id=>{
@@ -1245,7 +1240,7 @@ async function confirmarEntrada(){
   if(!entradaAtual){ return; }
   const qtdComprada = parseFloat(document.getElementById('ent-qtd-comprada').value);
   const unidadeCompra = document.getElementById('ent-unidade-compra').value.trim();
-  const fator = fatorAtual();
+  const fator = parseFloat(document.getElementById('ent-fator').value);
   const precoPago = parseFloat(document.getElementById('ent-preco-pago').value);
   const validade = document.getElementById('ent-validade').value;
   const nf = document.getElementById('ent-nf').value;
@@ -1721,12 +1716,13 @@ async function renderCodigosNoModal(produtoId){
   el.innerHTML = '<p style="color:#aaa;font-size:12px">Carregando...</p>';
   try{
     const codigos = await api(`/api/produtos/${produtoId}/codigos`);
+    const p = produtosCache.find(x => x.id === produtoId);
+    const unidadeBase = p ? p.unidade : '';
     el.innerHTML = codigos.length ? codigos.map(c => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border:1px solid #eee;border-radius:7px;margin-bottom:6px;font-size:12px">
-        <div><strong>${c.codigo_barras||'(sem código)'}</strong> — ${c.descricao_embalagem||c.unidade_compra} (fator ${c.fator_conversao})</div>
+        <div><strong>${c.codigo_barras||'(sem código)'}</strong> — ${rotuloEmbalagem(c, unidadeBase)}${c.descricao_embalagem?' — '+c.descricao_embalagem:''}</div>
         <button class="btn-icon" title="Remover" onclick="removerCodigoNoModal(${c.id},${produtoId})">⊘</button>
       </div>`).join('') : '<p style="color:#aaa;font-size:12px">Nenhum código associado ainda</p>';
-    const p = produtosCache.find(x => x.id === produtoId);
     if(p) p.codigos = codigos;
   }catch(e){ el.innerHTML = `<p style="color:#c0392b;font-size:12px">Erro: ${e.message}</p>`; }
 }
@@ -2624,29 +2620,71 @@ async function abrirRecebimento(pedidoId){
     const obsGeralHtml = pedidoRecebendo.obs
       ? `<div class="warn-box" style="margin-bottom:12px"><strong>Observações do pedido:</strong> ${pedidoRecebendo.obs}</div>` : '';
     document.getElementById('receber-itens-lista').innerHTML = obsGeralHtml + pedidoRecebendo.itens.map(it => {
-      const falta = parseFloat(it.quantidade_pedida) - parseFloat(it.quantidade_recebida||0);
-      return `<div class="item-row" data-item-id="${it.id}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:8px">
-      <div>
-        <b>${it.produto_descricao}</b>
-        <div style="color:#888;font-size:12px">Pedido: ${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' (1='+fmtNum(it.fator_conversao)+' '+it.unidade+') = ' : ''}${fmtNum(it.quantidade_pedida)} ${it.unidade} · já recebido: ${fmtNum(it.quantidade_recebida||0)} ${it.unidade}</div>
-        ${it.observacao ? `<div style="color:var(--brand-dark);font-size:12px;margin-top:2px">⚠ ${it.observacao}</div>` : ''}
-      </div>
-      <div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap">
-        <div class="field" style="width:140px"><label>Código de barras*</label><input type="text" class="receber-codigo" placeholder="Escaneie ou digite"></div>
-        <button class="btn btn-sm" title="Escanear" style="margin-bottom:1px">📷</button>
-        <div class="field" style="width:100px"><label>Qtd. recebida</label><input type="number" class="receber-qtd" placeholder="Ex: 20" step="0.0001" value="${falta>0?falta:''}"></div>
-        <div class="field" style="width:140px"><label>Data de validade</label><input type="date" class="receber-validade"></div>
-      </div>
-    </div>`;
+      const unidadeBase = it.unidade;
+      const faltaBase = parseFloat(it.quantidade_pedida) - parseFloat(it.quantidade_recebida||0);
+      const fatorPadrao = parseFloat(it.fator_conversao) || 1;
+      const unCompraPadrao = it.unidade_compra || unidadeBase;
+      const qtdVolPadrao = faltaBase > 0 ? (faltaBase / fatorPadrao) : '';
+      const precoVolPadrao = it.preco_unidade_compra != null ? it.preco_unidade_compra : (it.preco_unitario ? it.preco_unitario*fatorPadrao : '');
+      return `<div class="card" data-item-id="${it.id}" data-unidade-base="${unidadeBase}" style="background:#f8f8f5;margin-bottom:10px;padding:14px">
+        <div style="margin-bottom:10px">
+          <b>${it.produto_descricao}</b>
+          <div style="color:#888;font-size:12px">Pedido: ${it.quantidade_comprada ? fmtNum(it.quantidade_comprada)+' '+it.unidade_compra+' (1='+fmtNum(it.fator_conversao)+' '+unidadeBase+') = ' : ''}${fmtNum(it.quantidade_pedida)} ${unidadeBase} · já recebido: ${fmtNum(it.quantidade_recebida||0)} ${unidadeBase}</div>
+          ${it.observacao ? `<div style="color:var(--brand-dark);font-size:12px;margin-top:2px">⚠ ${it.observacao}</div>` : ''}
+        </div>
+
+        <div class="grid2" style="margin-bottom:10px;align-items:end">
+          <div class="field"><label>Quantidade de volumes*</label><input type="number" class="receber-qtdvol" step="0.0001" placeholder="Ex: 4" value="${qtdVolPadrao}" oninput="calcularResumoReceberItem(${it.id})"></div>
+          <div class="field"><label>Unidade de medida</label><select class="receber-unvol" onchange="calcularResumoReceberItem(${it.id})"></select></div>
+        </div>
+        <div class="grid3" style="margin-bottom:10px;align-items:end;grid-template-columns:2fr 1fr 1.4fr">
+          <div class="field"><label class="receber-equiv-label">1 unidade equivale a*</label><input type="number" class="receber-fator" step="0.0001" value="${fatorPadrao}" oninput="calcularResumoReceberItem(${it.id})"></div>
+          <div class="field"><label>&nbsp;</label><input type="text" class="receber-unbase-campo" value="${unidadeBase}" disabled></div>
+          <div class="field"><label>Quantidade* (${unidadeBase})</label><input type="text" class="receber-outqtd-campo" disabled></div>
+        </div>
+        <div class="grid2" style="margin-bottom:10px">
+          <div class="field"><label class="receber-preco-label">Valor unitário (R$)</label><input type="number" class="receber-precovol" step="0.0001" placeholder="Ex: 45,90" value="${precoVolPadrao}" oninput="calcularResumoReceberItem(${it.id})"></div>
+          <div class="field"><label>Valor total</label><input type="text" class="receber-outtotal-campo" disabled></div>
+        </div>
+        <div class="grid2" style="align-items:end">
+          <div class="field"><label>Código de barras*</label>
+            <div style="display:flex;gap:6px">
+              <input type="text" class="receber-codigo" placeholder="Escaneie ou digite" style="flex:1">
+              <button class="btn btn-sm" style="flex-shrink:0" title="Escanear" onclick="abrirScanner('receber-codigo-${it.id}', function(){})">📷</button>
+            </div>
+          </div>
+          <div class="field"><label>Data de validade*</label><input type="date" class="receber-validade"></div>
+        </div>
+      </div>`;
     }).join('');
-    // liga o botão de câmera de cada linha ao campo de código correspondente
-    document.querySelectorAll('#receber-itens-lista .item-row').forEach((row,i) => {
-      const input = row.querySelector('.receber-codigo');
-      input.id = 'receber-codigo-'+i;
-      const btn = row.querySelector('button.btn-sm');
-      btn.setAttribute('onclick', `abrirScanner('receber-codigo-${i}', function(){})`);
+    // completa os selects de unidade e liga os campos de código a IDs únicos (usados pelo scanner)
+    document.querySelectorAll('#receber-itens-lista .card').forEach(card => {
+      const itemId = card.dataset.itemId;
+      const unidadeBase = card.dataset.unidadeBase;
+      const it = pedidoRecebendo.itens.find(x => String(x.id) === String(itemId));
+      const selUn = card.querySelector('.receber-unvol');
+      selUn.innerHTML = unidades.map(u=>`<option value="${u.sigla}">${u.sigla} — ${u.nome}</option>`).join('');
+      selUn.value = it.unidade_compra || unidadeBase;
+      card.querySelector('.receber-codigo').id = 'receber-codigo-'+itemId;
+      calcularResumoReceberItem(itemId);
     });
   }catch(e){ toast('Erro: '+e.message); }
+}
+function calcularResumoReceberItem(itemId){
+  const card = document.querySelector(`#receber-itens-lista .card[data-item-id="${itemId}"]`);
+  if(!card) return;
+  const unidadeBase = card.dataset.unidadeBase;
+  const qtdVol = parseFloat(card.querySelector('.receber-qtdvol').value) || 0;
+  const fator = parseFloat(card.querySelector('.receber-fator').value) || 0;
+  const precoVol = parseFloat(card.querySelector('.receber-precovol').value) || 0;
+  const unCompra = card.querySelector('.receber-unvol').value || 'unidade';
+
+  card.querySelector('.receber-equiv-label').textContent = `1 ${unCompra} equivale a*`;
+  card.querySelector('.receber-preco-label').textContent = `Valor unitário (R$)`;
+  const qtdTotal = qtdVol * fator;
+  const valorTotal = qtdVol * precoVol;
+  card.querySelector('.receber-outqtd-campo').value = qtdTotal ? fmtNum(qtdTotal) : '';
+  card.querySelector('.receber-outtotal-campo').value = valorTotal ? fmtMoeda(valorTotal) : '';
 }
 function fecharRecebimento(){
   pedidoRecebendo = null;
@@ -2656,17 +2694,36 @@ function fecharRecebimento(){
 }
 async function confirmarRecebimento(){
   if(!pedidoRecebendo) return;
-  const linhas = [...document.querySelectorAll('#receber-itens-lista .item-row')];
+  const cards = [...document.querySelectorAll('#receber-itens-lista .card')];
   const itens = [];
-  for(const row of linhas){
-    const codigo = row.querySelector('.receber-codigo').value.trim();
-    const qtd = row.querySelector('.receber-qtd').value;
-    const validade = row.querySelector('.receber-validade').value;
-    if(!qtd || parseFloat(qtd) <= 0) continue;
-    if(!codigo){ toast('Escaneie o código de barras de todos os itens que estão sendo recebidos'); return; }
-    itens.push({ item_id: row.dataset.itemId, codigo_barras: codigo, quantidade_recebida: qtd, data_validade: validade || null });
+  for(const card of cards){
+    const qtdVol = card.querySelector('.receber-qtdvol').value;
+    if(!qtdVol || parseFloat(qtdVol) <= 0) continue;
+
+    const fator = parseFloat(card.querySelector('.receber-fator').value);
+    const unidade_compra = card.querySelector('.receber-unvol').value;
+    const precoVol = parseFloat(card.querySelector('.receber-precovol').value);
+    const codigo = card.querySelector('.receber-codigo').value.trim();
+    const validade = card.querySelector('.receber-validade').value;
+    const unidadeBase = card.dataset.unidadeBase;
+
+    if(!fator){ toast('Preencha a equivalência de unidade de todos os itens sendo recebidos'); return; }
+    if(!precoVol){ toast('Confirme o valor unitário de todos os itens sendo recebidos'); return; }
+    if(!codigo){ toast('Escaneie o código de barras de todos os itens sendo recebidos'); return; }
+    if(!validade){ toast('Informe a validade de todos os itens sendo recebidos'); return; }
+
+    const precoBase = precoVol / fator; // preço por unidade base, pra manter o padrão do estoque
+    itens.push({
+      item_id: card.dataset.itemId,
+      codigo_barras: codigo,
+      quantidade_comprada: qtdVol,
+      unidade_compra,
+      fator_conversao: fator,
+      preco_unitario: precoBase,
+      data_validade: validade
+    });
   }
-  if(itens.length === 0){ toast('Informe a quantidade recebida de ao menos um item'); return; }
+  if(itens.length === 0){ toast('Informe a quantidade de volumes recebida de ao menos um item'); return; }
   try{
     await api(`/api/pedidos/${pedidoRecebendo.id}/receber`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({itens}) });
     toast('✓ Recebimento confirmado — itens já estão no estoque');
