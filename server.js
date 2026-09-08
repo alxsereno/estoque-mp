@@ -33,7 +33,7 @@ app.post('/api/auth/login', async (req, res) => {
     );
     if(rows.length === 0) return res.status(401).json({ error: 'PIN incorreto' });
     const usuario = rows[0];
-    const token = jwt.sign({ id: usuario.id, nome: usuario.nome, role: usuario.role }, JWT_SECRET, { expiresIn: '16h' });
+    const token = jwt.sign({ id: usuario.id, nome: usuario.nome, role: usuario.role }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ ok: true, token, usuario });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });

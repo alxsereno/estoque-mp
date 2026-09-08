@@ -813,10 +813,11 @@ function toast(msg){
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2800);
 }
+let overlayMouseDownNoFundo = false;
 function abrirModal(titulo, innerHtml, opts){
   const largo = opts && opts.largo;
   document.getElementById('modal-root').innerHTML = `
-    <div class="modal-overlay" onclick="if(event.target===this) fecharModal()">
+    <div class="modal-overlay" onmousedown="overlayMouseDownNoFundo = (event.target===this)" onclick="if(event.target===this && overlayMouseDownNoFundo) fecharModal()">
       <div class="modal-box${largo ? ' modal-box-lg' : ''}">
         <div class="modal-header"><h2>${titulo}</h2><button class="modal-close" onclick="fecharModal()">✕</button></div>
         ${innerHtml}
@@ -870,7 +871,14 @@ async function api(path, opts){
   if(sessaoToken) headers['Authorization'] = 'Bearer ' + sessaoToken;
   const r = await fetch(API + path, Object.assign({}, opts, { headers }));
   const data = await r.json().catch(()=>({}));
-  if(r.status === 401){ fazerLogout(); throw new Error(data.error || 'Sessão expirada'); }
+  if(r.status === 401){
+    // Mostra o aviso aqui mesmo, porque quem chamou pode ter um catch que
+    // engole o erro silenciosamente (ex: dicas "nice to have") — sem isso
+    // o app parecia "fechar sozinho" sem nenhuma explicação pro operador.
+    toast('Sessão expirada — faça login novamente');
+    fazerLogout();
+    throw new Error(data.error || 'Sessão expirada');
+  }
   if(!r.ok) throw new Error(data.error || 'Erro na requisição');
   return data;
 }
@@ -882,7 +890,7 @@ async function apiRaw(path){
   if(sessaoToken) headers['Authorization'] = 'Bearer ' + sessaoToken;
   const r = await fetch(API + path, { headers });
   const data = await r.json().catch(()=>({}));
-  if(r.status === 401) fazerLogout();
+  if(r.status === 401){ toast('Sessão expirada — faça login novamente'); fazerLogout(); }
   return { ok: r.ok, status: r.status, data };
 }
 
@@ -2421,11 +2429,14 @@ function selecionarProdutoPedido(produtoId){
   calcularResumoItemPedido();
   mostrarReferenciaPreco(produto.id);
 }
+let referenciaPrecoSeq = 0;
 async function mostrarReferenciaPreco(produtoId){
   const el = document.getElementById('modal-ped-item-ref-preco');
   el.style.display = 'none';
+  const minhaSeq = ++referenciaPrecoSeq;
   try{
     const r = await api(`/api/produtos/${produtoId}/ultimo-lote`);
+    if(minhaSeq !== referenciaPrecoSeq) return; // usuário já trocou de produto — descarta resposta antiga
     if(r.encontrado){
       el.textContent = `💡 Último recebido: ${fmtMoeda(r.preco_unitario)}/${r.unidade} em ${fmtData(r.data_entrada)}${r.fornecedor_nome?' — '+r.fornecedor_nome:''}`;
       el.style.display = 'block';
