@@ -609,6 +609,21 @@ app.post('/api/ajustes', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════
+// Valor recebido (entradas) por dia — usado no gráfico do dashboard.
+app.get('/api/dashboard/entradas-por-dia', async (req, res) => {
+  const dias = Math.min(parseInt(req.query.dias) || 14, 90);
+  try {
+    const { rows } = await pool.query(
+      `SELECT data::text AS data, COALESCE(SUM(valor_total),0) AS valor_total
+       FROM movimentacoes
+       WHERE tipo='entrada' AND data >= CURRENT_DATE - ($1 || ' days')::interval
+       GROUP BY data ORDER BY data`,
+      [dias - 1]
+    );
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/dashboard', async (req, res) => {
   try {
     const cfgRes = await pool.query(`SELECT valor FROM configuracoes WHERE chave='validade'`);

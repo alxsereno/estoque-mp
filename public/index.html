@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--brand:#1e7e34;--brand-dark:#166b2b;--brand-soft:#e6f4ea;}
@@ -237,6 +238,10 @@ tr:hover td{background:#fafaf7}
       <div class="metric"><div class="metric-lbl">Lotes vencendo</div><div class="metric-val" id="d-vencendo-count">—</div></div>
       <div class="metric"><div class="metric-lbl">Produtos cadastrados</div><div class="metric-val" id="d-produtos-count">—</div></div>
     </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Valor recebido por dia (últimos 14 dias)</div>
+      <div style="height:220px"><canvas id="d-chart-entradas"></canvas></div>
+    </div>
     <div class="grid2">
       <div class="card">
         <div class="card-title">Valor de estoque por categoria</div>
@@ -301,7 +306,8 @@ tr:hover td{background:#fafaf7}
           <input type="text" id="ent-nf">
         </div>
         <div class="field"><label>Data de validade</label>
-          <input type="date" id="ent-validade">
+          <input type="date" id="ent-validade" oninput="aplicarValidacaoValidade(this, document.getElementById('ent-validade-aviso'))">
+          <div id="ent-validade-aviso" style="display:none;font-size:12px;color:#b8860b;margin-top:4px"></div>
         </div>
       </div>
 
@@ -412,7 +418,7 @@ tr:hover td{background:#fafaf7}
       <button class="btn" onclick="exportarEstoquePDF()">🖨️ Gerar PDF</button>
     </div>
     <div class="card" id="est-card-lote"><table>
-      <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. atual</th><th>Validade</th><th>Status</th><th>Fornecedor</th><th>Etiqueta</th><th></th></tr></thead>
+      <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. atual</th><th>Validade</th><th>Status</th><th>Fornecedor</th><th>Valor unitário</th><th>Valor total</th><th>Etiqueta</th><th></th></tr></thead>
       <tbody id="est-tbody"></tbody>
     </table></div>
     <div class="card" id="est-card-produto" style="display:none"><table>
@@ -949,7 +955,51 @@ async function carregarDashboard(){
           </div>
         </div>`).join('')
       : '<p style="color:#aaa;font-size:12px">Nenhum lote vencendo nos próximos dias</p>';
+
+    await renderGraficoEntradasPorDia();
   }catch(e){ toast('Erro ao carregar dashboard: '+e.message); }
+}
+
+let chartEntradasPorDia = null;
+async function renderGraficoEntradasPorDia(){
+  if(typeof Chart === 'undefined') return;
+  const DIAS = 14;
+  let dados = [];
+  try{ dados = await api(`/api/dashboard/entradas-por-dia?dias=${DIAS}`); }catch(e){ return; }
+
+  // preenche os dias sem nenhuma entrada com valor 0, pra não sumir do eixo
+  const porData = {};
+  dados.forEach(d => { porData[d.data] = parseFloat(d.valor_total); });
+  const labels = [], valores = [];
+  for(let i = DIAS - 1; i >= 0; i--){
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const chave = d.toISOString().slice(0,10);
+    labels.push(d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}));
+    valores.push(porData[chave] || 0);
+  }
+
+  const ctx = document.getElementById('d-chart-entradas').getContext('2d');
+  if(chartEntradasPorDia) chartEntradasPorDia.destroy();
+  chartEntradasPorDia = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Valor recebido (R$)',
+        data: valores,
+        backgroundColor: '#1e7e34',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => fmtMoeda(v) } }
+      }
+    }
+  });
 }
 
 async function carregarInicio(){
@@ -1213,6 +1263,9 @@ function abrirFormEntrada(produto, codigoInfo, codigoBarras){
   preencherSelectUnidade(selUnidade, codigoInfo ? codigoInfo.unidade_compra : produto.unidade);
   campoFator.value = codigoInfo ? codigoInfo.fator_conversao : 1;
   selUnidade.disabled = false;
+  const hojeStr = new Date().toISOString().slice(0,10);
+  document.getElementById('ent-validade').min = hojeStr;
+  document.getElementById('ent-validade-aviso').style.display = 'none';
   calcularResumoEntrada();
 }
 
@@ -1244,6 +1297,7 @@ function cancelarEntrada(){
   document.getElementById('ent-scan').value = '';
   document.getElementById('ent-resultado').innerHTML = '';
   ['ent-qtd-comprada','ent-fator','ent-preco-pago','ent-nf','ent-validade'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ent-validade-aviso').style.display = 'none';
   document.getElementById('ent-fornecedor').value = '';
   document.getElementById('ent-scan').focus();
 }
@@ -1478,6 +1532,36 @@ async function confirmarSaida(){
 // ═══════════════════════ ESTOQUE ═══════════════════════
 let estoqueVisao = 'lote';
 let configValidade = { critico: 7, atencao: 30 };
+// Regra única de validação de data de validade, usada tanto na Entrada
+// quanto no Recebimento de Pedido: não deixa cadastrar data passada, e
+// avisa (sem bloquear) quando faltam menos de 3 dias pro vencimento.
+function checarDataValidade(dataStr){
+  if(!dataStr) return { status: 'vazia' };
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const val = new Date(dataStr + 'T00:00:00');
+  const dias = Math.round((val - hoje) / 86400000);
+  if(dias < 0) return { status: 'invalida', dias };
+  if(dias < 3) return { status: 'critica', dias };
+  return { status: 'ok', dias };
+}
+function aplicarValidacaoValidade(inputEl, avisoEl){
+  const r = checarDataValidade(inputEl.value);
+  if(r.status === 'vazia'){ if(avisoEl) avisoEl.style.display = 'none'; return; }
+  if(r.status === 'invalida'){
+    toast('A validade não pode ser uma data anterior a hoje');
+    inputEl.value = '';
+    if(avisoEl) avisoEl.style.display = 'none';
+    return;
+  }
+  if(avisoEl){
+    if(r.status === 'critica'){
+      avisoEl.textContent = r.dias <= 0 ? '⚠ Este lote vence hoje!' : `⚠ Este lote vence em ${r.dias} dia(s)`;
+      avisoEl.style.display = 'block';
+    } else {
+      avisoEl.style.display = 'none';
+    }
+  }
+}
 function statusValidade(dataValidade){
   if(!dataValidade) return { label: 'Sem validade', cls: 'badge-gray', dot: '#aaa' };
   const hoje = new Date(); hoje.setHours(0,0,0,0);
@@ -1554,6 +1638,8 @@ function renderEstoque(){
   if(estoqueVisao === 'lote'){
     document.getElementById('est-tbody').innerHTML = filtrado.map(l => {
       const st = statusValidade(l.data_validade);
+      const valorUn = parseFloat(l.preco_unitario) || 0;
+      const valorTotalLote = valorUn * parseFloat(l.quantidade_atual);
       return `<tr>
       <td><span class="lote-tag">${l.codigo_lote}</span></td>
       <td>${l.produto_descricao}</td>
@@ -1562,10 +1648,12 @@ function renderEstoque(){
       <td>${fmtData(l.data_validade)}</td>
       <td><span class="badge ${st.cls}"><span class="status-dot" style="background:${st.dot}"></span>${st.label}</span></td>
       <td>${l.fornecedor_nome||'—'}</td>
+      <td>${valorUn ? fmtMoeda(valorUn) + ' / ' + l.unidade : '—'}</td>
+      <td>${valorUn ? fmtMoeda(valorTotalLote) : '—'}</td>
       <td>${l.possui_codigo_barras ? '<span class="badge badge-gray">Cód. fornecedor</span>' : (l.etiqueta_impressa ? '<span class="badge badge-ok">Impressa</span>' : '<span class="badge badge-warn">Pendente</span>')}</td>
       <td>${!l.possui_codigo_barras ? `<button class="btn btn-sm" onclick='reimprimirEtiqueta(${JSON.stringify(l).replace(/'/g,"&apos;")})'>🖨️</button>` : ''}</td>
     </tr>`;
-    }).join('') || '<tr><td colspan="9" style="color:#aaa;text-align:center;padding:24px">Nenhum lote encontrado</td></tr>';
+    }).join('') || '<tr><td colspan="11" style="color:#aaa;text-align:center;padding:24px">Nenhum lote encontrado</td></tr>';
   } else {
     const linhas = estoqueAgrupadoPorProduto(filtrado);
     document.getElementById('est-produto-tbody').innerHTML = linhas.map(g => `<tr>
@@ -1589,11 +1677,15 @@ function exportarEstoqueExcel(){
   const filtrado = estoqueFiltrado();
   let linhas, headers;
   if(estoqueVisao === 'lote'){
-    headers = ['Lote','Produto','Categoria','Qtd. atual','Unidade','Validade','Status validade','Fornecedor'];
-    linhas = filtrado.map(l => [
-      l.codigo_lote, l.produto_descricao, l.categoria||'', parseFloat(l.quantidade_atual), l.unidade,
-      l.data_validade||'', statusValidade(l.data_validade).label, l.fornecedor_nome||''
-    ]);
+    headers = ['Lote','Produto','Categoria','Qtd. atual','Unidade','Validade','Status validade','Fornecedor','Valor unitário (R$)','Valor total (R$)'];
+    linhas = filtrado.map(l => {
+      const valorUn = parseFloat(l.preco_unitario) || 0;
+      return [
+        l.codigo_lote, l.produto_descricao, l.categoria||'', parseFloat(l.quantidade_atual), l.unidade,
+        l.data_validade||'', statusValidade(l.data_validade).label, l.fornecedor_nome||'',
+        Number(valorUn.toFixed(4)), Number((valorUn*parseFloat(l.quantidade_atual)).toFixed(2))
+      ];
+    });
   } else {
     const agrupado = estoqueAgrupadoPorProduto(filtrado);
     headers = ['Produto','Categoria','Qtd. total','Unidade','Volumes','Mín.','Máx.','Status validade','Status estoque','Valor total (R$)','Valor unitário (R$)'];
@@ -1626,10 +1718,11 @@ function exportarEstoquePDF(){
   let tabelaHtml;
   if(estoqueVisao === 'lote'){
     tabelaHtml = `<table style="width:100%;border-collapse:collapse;font-size:11px">
-      <thead><tr>${['Lote','Produto','Categoria','Qtd. atual','Validade','Status','Fornecedor'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
+      <thead><tr>${['Lote','Produto','Categoria','Qtd. atual','Validade','Status','Fornecedor','Valor unit.','Valor total'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
       <tbody>${filtrado.map(l => {
         const st = statusValidade(l.data_validade);
-        return `<tr>${[l.codigo_lote, l.produto_descricao, l.categoria||'—', fmtNum(l.quantidade_atual)+' '+l.unidade, fmtData(l.data_validade), st.label, l.fornecedor_nome||'—'].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`;
+        const valorUn = parseFloat(l.preco_unitario) || 0;
+        return `<tr>${[l.codigo_lote, l.produto_descricao, l.categoria||'—', fmtNum(l.quantidade_atual)+' '+l.unidade, fmtData(l.data_validade), st.label, l.fornecedor_nome||'—', valorUn?fmtMoeda(valorUn)+'/'+l.unidade:'—', valorUn?fmtMoeda(valorUn*parseFloat(l.quantidade_atual)):'—'].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`;
       }).join('')}</tbody></table>`;
   } else {
     const agrupado = estoqueAgrupadoPorProduto(filtrado);
@@ -2686,7 +2779,10 @@ async function abrirRecebimento(pedidoId){
               <button class="btn btn-sm" style="flex-shrink:0" title="Escanear" onclick="abrirScanner('receber-codigo-${it.id}', function(){})">📷</button>
             </div>
           </div>
-          <div class="field"><label>Data de validade*</label><input type="date" class="receber-validade"></div>
+          <div class="field"><label>Data de validade*</label>
+            <input type="date" class="receber-validade" oninput="aplicarValidacaoValidade(this, this.parentElement.querySelector('.receber-validade-aviso'))">
+            <div class="receber-validade-aviso" style="display:none;font-size:11px;color:#b8860b;margin-top:4px"></div>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -2699,6 +2795,7 @@ async function abrirRecebimento(pedidoId){
       selUn.innerHTML = unidades.map(u=>`<option value="${u.sigla}">${u.sigla} — ${u.nome}</option>`).join('');
       selUn.value = it.unidade_compra || unidadeBase;
       card.querySelector('.receber-codigo').id = 'receber-codigo-'+itemId;
+      card.querySelector('.receber-validade').min = new Date().toISOString().slice(0,10);
       calcularResumoReceberItem(itemId);
     });
   }catch(e){ toast('Erro: '+e.message); }
