@@ -95,12 +95,12 @@ app.get('/api/categorias', async (req, res) => {
 });
 
 app.post('/api/categorias', requireGestor, async (req, res) => {
-  const { nome, cor } = req.body;
+  const { nome, cor, tipo } = req.body;
   if(!nome) return res.status(400).json({ error: 'Nome da categoria é obrigatório' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO categorias (nome, cor) VALUES ($1,$2) RETURNING *`,
-      [nome.trim(), cor || null]
+      `INSERT INTO categorias (nome, cor, tipo) VALUES ($1,$2,$3) RETURNING *`,
+      [nome.trim(), cor || null, tipo === 'nao_produtivo' ? 'nao_produtivo' : 'produtivo']
     );
     res.json({ ok: true, categoria: rows[0] });
   } catch(e){
@@ -110,11 +110,11 @@ app.post('/api/categorias', requireGestor, async (req, res) => {
 });
 
 app.put('/api/categorias/:id', requireGestor, async (req, res) => {
-  const { nome, cor } = req.body;
+  const { nome, cor, tipo } = req.body;
   try {
     const { rows } = await pool.query(
-      `UPDATE categorias SET nome=$1, cor=$2 WHERE id=$3 RETURNING *`,
-      [nome, cor || null, req.params.id]
+      `UPDATE categorias SET nome=$1, cor=$2, tipo=$3 WHERE id=$4 RETURNING *`,
+      [nome, cor || null, tipo === 'nao_produtivo' ? 'nao_produtivo' : 'produtivo', req.params.id]
     );
     res.json({ ok: true, categoria: rows[0] });
   } catch(e){
@@ -137,7 +137,7 @@ app.delete('/api/categorias/:id', requireGestor, async (req, res) => {
 app.get('/api/produtos', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.*, c.nome AS categoria
+      `SELECT p.*, c.nome AS categoria, c.tipo AS categoria_tipo
        FROM produtos p LEFT JOIN categorias c ON c.id = p.categoria_id
        WHERE p.ativo = TRUE ORDER BY p.descricao`
     );
@@ -146,15 +146,15 @@ app.get('/api/produtos', async (req, res) => {
 });
 
 app.post('/api/produtos', async (req, res) => {
-  const { codigo, descricao, categoria_id, unidade, estoque_minimo, estoque_maximo } = req.body;
+  const { codigo, descricao, categoria_id, unidade, estoque_minimo, estoque_maximo, localizacao_estoque } = req.body;
   if(!codigo || !descricao){
     return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO produtos (codigo, descricao, categoria_id, unidade, estoque_minimo, estoque_maximo, origem)
-       VALUES ($1,$2,$3,$4,$5,$6,'manual') RETURNING *`,
-      [codigo, descricao, categoria_id || null, unidade || 'kg', estoque_minimo || null, estoque_maximo || null]
+      `INSERT INTO produtos (codigo, descricao, categoria_id, unidade, estoque_minimo, estoque_maximo, localizacao_estoque, origem)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'manual') RETURNING *`,
+      [codigo, descricao, categoria_id || null, unidade || 'kg', estoque_minimo || null, estoque_maximo || null, localizacao_estoque || null]
     );
     res.json({ ok: true, produto: rows[0] });
   } catch(e){
@@ -164,12 +164,12 @@ app.post('/api/produtos', async (req, res) => {
 });
 
 app.put('/api/produtos/:id', async (req, res) => {
-  const { descricao, categoria_id, unidade, estoque_minimo, estoque_maximo } = req.body;
+  const { descricao, categoria_id, unidade, estoque_minimo, estoque_maximo, localizacao_estoque } = req.body;
   try {
     const { rows } = await pool.query(
-      `UPDATE produtos SET descricao=$1, categoria_id=$2, unidade=$3, estoque_minimo=$4, estoque_maximo=$5
-       WHERE id=$6 RETURNING *`,
-      [descricao, categoria_id || null, unidade, estoque_minimo || null, estoque_maximo || null, req.params.id]
+      `UPDATE produtos SET descricao=$1, categoria_id=$2, unidade=$3, estoque_minimo=$4, estoque_maximo=$5, localizacao_estoque=$6
+       WHERE id=$7 RETURNING *`,
+      [descricao, categoria_id || null, unidade, estoque_minimo || null, estoque_maximo || null, localizacao_estoque || null, req.params.id]
     );
     res.json({ ok: true, produto: rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
@@ -613,14 +613,30 @@ app.post('/api/ajustes', async (req, res) => {
 app.get('/api/dashboard/entradas-por-dia', async (req, res) => {
   const dias = Math.min(parseInt(req.query.dias) || 14, 90);
   try {
-    const { rows } = await pool.query(
+    const entradas = await pool.query(
       `SELECT data::text AS data, COALESCE(SUM(valor_total),0) AS valor_total
        FROM movimentacoes
        WHERE tipo='entrada' AND data >= CURRENT_DATE - ($1 || ' days')::interval
        GROUP BY data ORDER BY data`,
       [dias - 1]
     );
-    res.json(rows);
+    const saidas = await pool.query(
+      `SELECT data::text AS data, COALESCE(SUM(valor_total),0) AS valor_total
+       FROM movimentacoes
+       WHERE tipo='saida' AND data >= CURRENT_DATE - ($1 || ' days')::interval
+       GROUP BY data ORDER BY data`,
+      [dias - 1]
+    );
+    // impacto financeiro líquido dos ajustes por dia (pode ser positivo ou
+    // negativo), usado só pra deixar a linha de saldo mais precisa.
+    const ajustes = await pool.query(
+      `SELECT a.data::date::text AS data, COALESCE(SUM(a.diff * COALESCE(l.preco_unitario,0)),0) AS valor_total
+       FROM ajustes a LEFT JOIN lotes l ON l.id = a.lote_id
+       WHERE a.data::date >= CURRENT_DATE - ($1 || ' days')::interval
+       GROUP BY a.data::date`,
+      [dias - 1]
+    );
+    res.json({ entradas: entradas.rows, saidas: saidas.rows, ajustes: ajustes.rows });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -653,9 +669,19 @@ app.get('/api/dashboard', async (req, res) => {
       [atencao]
     );
 
+    // "Saída por consumo" — baixas normais feitas na tela Saída
     const baixasHoje = await pool.query(
       `SELECT COALESCE(SUM(valor_total),0) AS valor_total, COALESCE(SUM(quantidade),0) AS quantidade_total, COUNT(*) AS total_movimentacoes
        FROM movimentacoes WHERE tipo='saida' AND data = CURRENT_DATE`
+    );
+
+    // "Saída por ajuste" — reduções de saldo feitas na tela Ajustes/Inventário
+    // (perda, quebra, contagem divergente etc.) — valorizado pelo preço atual do lote.
+    const ajustesHoje = await pool.query(
+      `SELECT COALESCE(SUM(ABS(a.diff) * COALESCE(l.preco_unitario,0)),0) AS valor_total,
+              COALESCE(SUM(ABS(a.diff)),0) AS quantidade_total, COUNT(*) AS total_movimentacoes
+       FROM ajustes a LEFT JOIN lotes l ON l.id = a.lote_id
+       WHERE a.diff < 0 AND a.data::date = CURRENT_DATE`
     );
 
     const entradasHoje = await pool.query(
@@ -675,6 +701,7 @@ app.get('/api/dashboard', async (req, res) => {
         criticidade: r.dias_restantes <= critico ? 'critico' : (r.dias_restantes <= atencao ? 'atencao' : 'ok')
       })),
       baixas_hoje: baixasHoje.rows[0],
+      ajustes_hoje: ajustesHoje.rows[0],
       entradas_hoje: entradasHoje.rows[0],
       limites: { critico, atencao }
     });
@@ -709,6 +736,38 @@ app.post('/api/unidades', requireGestor, async (req, res) => {
 app.delete('/api/unidades/:id', requireGestor, async (req, res) => {
   try {
     await pool.query(`DELETE FROM unidades WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// DESTINOS (lista padronizada usada na Saída)
+// ═══════════════════════════════════════════════════════════
+app.get('/api/destinos', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM destinos ORDER BY nome`);
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/destinos', requireGestor, async (req, res) => {
+  const { nome } = req.body;
+  if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO destinos (nome) VALUES ($1) RETURNING *`,
+      [nome.trim()]
+    );
+    res.json({ ok: true, destino: rows[0] });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Esse destino já existe' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/destinos/:id', requireGestor, async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM destinos WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });

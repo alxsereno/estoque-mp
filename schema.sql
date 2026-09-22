@@ -24,6 +24,7 @@
 CREATE TABLE IF NOT EXISTS categorias (id SERIAL PRIMARY KEY);
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS nome VARCHAR(100);
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS cor VARCHAR(20);
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) DEFAULT 'produtivo';
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'categorias_nome_key') THEN
@@ -38,6 +39,7 @@ ALTER TABLE produtos ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES ca
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS unidade VARCHAR(10) DEFAULT 'kg';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS estoque_minimo NUMERIC(12,4);
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS estoque_maximo NUMERIC(12,4);
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS localizacao_estoque VARCHAR(100);
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS origem VARCHAR(20) DEFAULT 'manual';
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
@@ -178,6 +180,16 @@ INSERT INTO unidades (sigla, nome) VALUES
   ('kg','Quilograma'), ('g','Grama'), ('l','Litro'), ('ml','Mililitro'),
   ('un','Unidade'), ('pct','Pacote'), ('cx','Caixa'), ('sc','Saco'), ('dz','Dúzia')
 ON CONFLICT (sigla) DO NOTHING;
+
+-- Destinos padronizados de saída (ex: "Cozinha - Marmita A", "Perda", "Amostra")
+CREATE TABLE IF NOT EXISTS destinos (id SERIAL PRIMARY KEY);
+ALTER TABLE destinos ADD COLUMN IF NOT EXISTS nome VARCHAR(100);
+ALTER TABLE destinos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'destinos_nome_key') THEN
+    ALTER TABLE destinos ADD CONSTRAINT destinos_nome_key UNIQUE (nome);
+  END IF;
+END $$;
 
 -- ═══════════════════════════════════════════════════════════
 -- CORREÇÃO DE TIPOS HERDADOS DA v1: nas tabelas lotes/movimentacoes,
