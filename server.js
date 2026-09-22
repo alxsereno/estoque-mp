@@ -1136,6 +1136,108 @@ app.post('/api/pedidos/:id/receber', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════
+// ROTINAS (tarefas recorrentes de estoque/compras)
+// ═══════════════════════════════════════════════════════════
+app.get('/api/rotinas', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.*, u.nome AS criado_por_nome FROM rotinas r
+       LEFT JOIN usuarios u ON u.id = r.criado_por
+       WHERE r.ativo = TRUE ORDER BY r.frequencia, r.dia_semana NULLS LAST, r.dia_mes NULLS LAST, r.titulo`
+    );
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/rotinas', requireGestor, async (req, res) => {
+  const { titulo, descricao, responsavel_role, frequencia, dia_semana, dia_mes } = req.body;
+  if(!titulo || !['operador','planejador','admin'].includes(responsavel_role) || !['semanal','mensal'].includes(frequencia)){
+    return res.status(400).json({ error: 'Título, responsável e frequência são obrigatórios' });
+  }
+  if(frequencia === 'semanal' && (dia_semana === undefined || dia_semana === null || dia_semana === '')){
+    return res.status(400).json({ error: 'Selecione o dia da semana' });
+  }
+  if(frequencia === 'mensal' && (!dia_mes || dia_mes < 1 || dia_mes > 28)){
+    return res.status(400).json({ error: 'Escolha um dia do mês entre 1 e 28' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO rotinas (titulo, descricao, responsavel_role, frequencia, dia_semana, dia_mes, criado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [titulo.trim(), descricao||null, responsavel_role, frequencia,
+       frequencia==='semanal' ? dia_semana : null, frequencia==='mensal' ? dia_mes : null, req.usuario.id]
+    );
+    res.json({ ok: true, rotina: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/rotinas/:id', requireGestor, async (req, res) => {
+  const { titulo, descricao, responsavel_role, frequencia, dia_semana, dia_mes } = req.body;
+  if(!titulo || !['operador','planejador','admin'].includes(responsavel_role) || !['semanal','mensal'].includes(frequencia)){
+    return res.status(400).json({ error: 'Título, responsável e frequência são obrigatórios' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE rotinas SET titulo=$1, descricao=$2, responsavel_role=$3, frequencia=$4, dia_semana=$5, dia_mes=$6
+       WHERE id=$7 RETURNING *`,
+      [titulo.trim(), descricao||null, responsavel_role, frequencia,
+       frequencia==='semanal' ? dia_semana : null, frequencia==='mensal' ? dia_mes : null, req.params.id]
+    );
+    res.json({ ok: true, rotina: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/rotinas/:id', requireGestor, async (req, res) => {
+  try {
+    await pool.query(`UPDATE rotinas SET ativo = FALSE WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// Rotinas que vencem HOJE (semanal: mesmo dia da semana; mensal: mesmo dia
+// do mês), já com o status de conclusão de hoje.
+app.get('/api/rotinas/hoje', async (req, res) => {
+  try {
+    const hoje = new Date();
+    const diaSemana = hoje.getDay(); // 0=domingo..6=sábado (mesma convenção do JS no front)
+    const diaMes = hoje.getDate();
+    const { rows } = await pool.query(
+      `SELECT r.*, re.id AS execucao_id, re.concluido_em, u.nome AS concluido_por_nome
+       FROM rotinas r
+       LEFT JOIN rotina_execucoes re ON re.rotina_id = r.id AND re.data = CURRENT_DATE
+       LEFT JOIN usuarios u ON u.id = re.concluido_por
+       WHERE r.ativo = TRUE AND (
+         (r.frequencia = 'semanal' AND r.dia_semana = $1) OR
+         (r.frequencia = 'mensal' AND r.dia_mes = $2)
+       )
+       ORDER BY r.responsavel_role, r.titulo`,
+      [diaSemana, diaMes]
+    );
+    res.json(rows.map(r => ({ ...r, concluida: !!r.execucao_id })));
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/rotinas/:id/concluir', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO rotina_execucoes (rotina_id, data, concluido_por)
+       VALUES ($1, CURRENT_DATE, $2)
+       ON CONFLICT (rotina_id, data) DO UPDATE SET concluido_por=$2, concluido_em=NOW()
+       RETURNING *`,
+      [req.params.id, req.usuario.id]
+    );
+    res.json({ ok: true, execucao: rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/rotinas/:id/concluir', async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM rotina_execucoes WHERE rotina_id=$1 AND data=CURRENT_DATE`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date() }));
 
 app.get('*', (_, res) => {

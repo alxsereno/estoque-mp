@@ -95,6 +95,12 @@ tr:hover td{background:#fafaf7}
 .cat-bar{height:100%;background:#1a1a18;border-radius:4px}
 .cat-val{min-width:80px;text-align:right;color:#888}
 .alert-box{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;margin-bottom:8px;font-size:12px}
+.rotina-alerta-card{background:#fff8e1;border:1px solid #f3e3ad;border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.rotina-alerta-titulo{font-weight:600;font-size:13px;color:#8a6d1a;margin-bottom:8px}
+.rotina-item{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0e6c4}
+.rotina-item:last-child{border-bottom:none}
+.rotina-item.concluida{opacity:.5}
+.rotina-item.concluida .rotina-item-titulo{text-decoration:line-through}
 .alert-danger{background:#fde8e8}.alert-warn{background:#fff8e1}
 .alert-dot{width:7px;height:7px;border-radius:50%;margin-top:3px;flex-shrink:0}
 .dot-danger{background:#c0392b}.dot-warn{background:#b8860b}
@@ -235,6 +241,7 @@ tr:hover td{background:#fafaf7}
   <section class="screen" id="s-dashboard">
     <h1>Dashboard</h1>
     <p class="sub">Visão geral do estoque de matéria-prima</p>
+    <div id="d-rotinas-alerta"></div>
     <div class="grid6" style="margin-bottom:16px">
       <div class="metric" style="background:var(--brand-soft)"><div class="metric-lbl">Entradas hoje</div><div class="metric-val" id="d-entradas-valor" style="color:var(--brand-dark)">—</div></div>
       <div class="metric" style="background:#e8f0fe"><div class="metric-lbl">Saída por consumo</div><div class="metric-val" id="d-baixas-valor" style="color:#1a56db">—</div></div>
@@ -263,6 +270,7 @@ tr:hover td{background:#fafaf7}
   <section class="screen" id="s-inicio">
     <h1 id="inicio-saudacao">Olá</h1>
     <p class="sub" id="inicio-data"></p>
+    <div id="ini-rotinas-alerta"></div>
     <div class="grid2" style="margin-bottom:20px">
       <div class="metric" style="background:var(--brand-soft)">
         <div class="metric-lbl">Entradas hoje</div>
@@ -714,6 +722,21 @@ tr:hover td{background:#fafaf7}
     <div class="crono-grid" id="crono-grid"></div>
   </section>
 
+  <!-- ROTINAS -->
+  <section class="screen" id="s-rotinas">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <h1>Rotinas</h1>
+        <p class="sub">Tarefas recorrentes de estoque e compras — aparecem como lembrete na tela inicial de quem é responsável</p>
+      </div>
+      <button class="btn btn-dark" onclick="abrirNovaRotina()">+ Nova rotina</button>
+    </div>
+    <div class="card"><table>
+      <thead><tr><th>Tarefa</th><th>Responsável</th><th>Frequência</th><th>Quando</th><th></th></tr></thead>
+      <tbody id="rot-tbody"></tbody>
+    </table></div>
+  </section>
+
   <!-- RECEBER PEDIDO -->
   <section class="screen" id="s-receber-pedido">
     <h1>Receber Pedido</h1>
@@ -843,6 +866,7 @@ const SCREENS = [
   {id:'ajustes', icon:'clipboard', label:'Ajustes', grupo:'Operação', roles:['admin','planejador']},
   {id:'pedidos', icon:'clipboard', label:'Pedidos de compra', grupo:'Compras', roles:['admin','planejador']},
   {id:'cronograma', icon:'calc', label:'Cronograma', grupo:'Compras', roles:['admin','planejador']},
+  {id:'rotinas', icon:'clipboard', label:'Rotinas', grupo:'Compras', roles:['admin','planejador']},
 ];
 
 function initNav(){
@@ -871,7 +895,7 @@ const CARREGADORES = {
   produtos: carregarProdutos, fornecedores: carregarFornecedores,
   movimentacoes: carregarMovimentacoes, ajustes: carregarAjustes, config: carregarConfig,
   usuarios: carregarUsuarios, pedidos: carregarPedidos, cronograma: carregarCronograma,
-  'receber-pedido': carregarReceberPedido
+  'receber-pedido': carregarReceberPedido, rotinas: carregarRotinas
 };
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -1001,6 +1025,9 @@ function atualizarSelectUnidadeBase(){
 // ═══════════════════════ DASHBOARD ═══════════════════════
 async function carregarDashboard(){
   try{
+    const rolesVisiveis = sessaoUsuario.role === 'admin' ? ['operador','planejador','admin'] : [sessaoUsuario.role];
+    renderAlertaRotinas('d-rotinas-alerta', rolesVisiveis);
+
     const d = await api('/api/dashboard');
     document.getElementById('d-entradas-valor').textContent = fmtMoeda(d.entradas_hoje.valor_total);
     document.getElementById('d-baixas-valor').textContent = fmtMoeda(d.baixas_hoje.valor_total);
@@ -1130,6 +1157,7 @@ async function renderGraficoEntradasPorDia(saldoAtual){
 async function carregarInicio(){
   document.getElementById('inicio-saudacao').textContent = 'Olá, ' + (sessaoUsuario ? sessaoUsuario.nome : '');
   document.getElementById('inicio-data').textContent = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
+  renderAlertaRotinas('ini-rotinas-alerta', ['operador']);
 
   const botoesIni = [
     {id:'entrada', label:'Entrada', icon:'entrada', cor:'var(--brand)'},
@@ -3091,6 +3119,141 @@ async function confirmarRecebimento(){
     await api(`/api/pedidos/${pedidoRecebendo.id}/receber`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({itens}) });
     toast('✓ Recebimento confirmado — itens já estão no estoque');
     fecharRecebimento();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+// ═══════════════════════ ROTINAS ═══════════════════════
+const DIAS_SEMANA_NOMES = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const ROLE_ROTINA_LABEL = { operador: 'Estoquista (Operador)', planejador: 'Compras (Planejador)', admin: 'Admin' };
+
+async function carregarRotinas(){
+  const lista = await api('/api/rotinas');
+  document.getElementById('rot-tbody').innerHTML = lista.map(r => `
+    <tr>
+      <td><b>${r.titulo}</b>${r.descricao ? `<div style="color:#888;font-size:12px">${r.descricao}</div>` : ''}</td>
+      <td>${ROLE_ROTINA_LABEL[r.responsavel_role]}</td>
+      <td>${r.frequencia === 'semanal' ? 'Semanal' : 'Mensal'}</td>
+      <td>${r.frequencia === 'semanal' ? 'Toda ' + DIAS_SEMANA_NOMES[r.dia_semana] : 'Dia ' + r.dia_mes + ' do mês'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick="editarRotina(${r.id})">Editar</button>
+        <button class="btn-icon" title="Excluir" onclick="excluirRotina(${r.id},'${r.titulo.replace(/'/g,"\\'")}')">⊘</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="5" style="color:#aaa;text-align:center;padding:24px">Nenhuma rotina cadastrada</td></tr>';
+}
+
+function montarFormRotina(r){
+  const freqSemanal = !r || r.frequencia === 'semanal';
+  return `
+    <div class="field" style="margin-bottom:12px"><label>Título da tarefa*</label><input id="modal-rot-titulo" placeholder="Ex: Contar estoque de embalagens" value="${r ? r.titulo.replace(/"/g,'&quot;') : ''}"></div>
+    <div class="field" style="margin-bottom:12px"><label>Descrição (opcional)</label><input id="modal-rot-descricao" placeholder="Detalhe da tarefa" value="${r && r.descricao ? r.descricao.replace(/"/g,'&quot;') : ''}"></div>
+    <div class="field" style="margin-bottom:12px"><label>Responsável*</label>
+      <select id="modal-rot-role">
+        <option value="operador" ${(!r||r.responsavel_role==='operador')?'selected':''}>Estoquista (Operador)</option>
+        <option value="planejador" ${r&&r.responsavel_role==='planejador'?'selected':''}>Compras (Planejador)</option>
+        <option value="admin" ${r&&r.responsavel_role==='admin'?'selected':''}>Admin</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:12px"><label>Frequência*</label>
+      <select id="modal-rot-frequencia" onchange="alternarCampoFrequenciaRotina()">
+        <option value="semanal" ${freqSemanal?'selected':''}>Semanal (todo mesmo dia da semana)</option>
+        <option value="mensal" ${!freqSemanal?'selected':''}>Mensal (todo mesmo dia do mês)</option>
+      </select>
+    </div>
+    <div class="field" id="modal-rot-semanal-wrap" style="margin-bottom:16px;display:${freqSemanal?'block':'none'}">
+      <label>Dia da semana*</label>
+      <select id="modal-rot-dia-semana">${DIAS_SEMANA_NOMES.map((n,i)=>`<option value="${i}" ${r&&r.dia_semana===i?'selected':''}>${n}</option>`).join('')}</select>
+    </div>
+    <div class="field" id="modal-rot-mensal-wrap" style="margin-bottom:16px;display:${freqSemanal?'none':'block'}">
+      <label>Dia do mês* (1 a 28)</label>
+      <input type="number" id="modal-rot-dia-mes" min="1" max="28" value="${r && r.dia_mes ? r.dia_mes : ''}" placeholder="Ex: 1">
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-dark" onclick="salvarRotina(${r ? r.id : 'null'})">${r ? 'Salvar alterações' : 'Criar rotina'}</button>
+    </div>`;
+}
+function alternarCampoFrequenciaRotina(){
+  const semanal = document.getElementById('modal-rot-frequencia').value === 'semanal';
+  document.getElementById('modal-rot-semanal-wrap').style.display = semanal ? 'block' : 'none';
+  document.getElementById('modal-rot-mensal-wrap').style.display = semanal ? 'none' : 'block';
+}
+function abrirNovaRotina(){
+  abrirModal('Nova rotina', montarFormRotina(null));
+}
+let rotinasCache = [];
+async function editarRotina(id){
+  if(rotinasCache.length === 0) rotinasCache = await api('/api/rotinas');
+  const r = rotinasCache.find(x => x.id === id);
+  if(!r) return;
+  abrirModal('Editar rotina', montarFormRotina(r));
+}
+async function salvarRotina(id){
+  const titulo = document.getElementById('modal-rot-titulo').value.trim();
+  const descricao = document.getElementById('modal-rot-descricao').value.trim();
+  const responsavel_role = document.getElementById('modal-rot-role').value;
+  const frequencia = document.getElementById('modal-rot-frequencia').value;
+  const dia_semana = frequencia === 'semanal' ? parseInt(document.getElementById('modal-rot-dia-semana').value) : null;
+  const dia_mes = frequencia === 'mensal' ? parseInt(document.getElementById('modal-rot-dia-mes').value) : null;
+  if(!titulo){ toast('Informe o título da tarefa'); return; }
+  if(frequencia === 'mensal' && (!dia_mes || dia_mes < 1 || dia_mes > 28)){ toast('Escolha um dia do mês entre 1 e 28'); return; }
+  const payload = { titulo, descricao: descricao||null, responsavel_role, frequencia, dia_semana, dia_mes };
+  try{
+    if(id){
+      await api(`/api/rotinas/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      toast('✓ Rotina atualizada');
+    } else {
+      await api('/api/rotinas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      toast('✓ Rotina criada');
+    }
+    fecharModal();
+    rotinasCache = [];
+    carregarRotinas();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+async function excluirRotina(id, titulo){
+  if(!confirm(`Excluir a rotina "${titulo}"?`)) return;
+  try{
+    await api(`/api/rotinas/${id}`, { method:'DELETE' });
+    toast('✓ Rotina excluída');
+    rotinasCache = [];
+    carregarRotinas();
+  }catch(e){ toast('Erro: '+e.message); }
+}
+
+// Card de lembrete usado tanto no Dashboard (admin/planejador) quanto na
+// tela Início do Operador — mostra as rotinas que vencem hoje pros papéis
+// indicados, com botão pra marcar/desmarcar concluída.
+async function renderAlertaRotinas(containerId, roles){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  try{
+    const todas = await api('/api/rotinas/hoje');
+    const rotinasHoje = todas.filter(r => roles.includes(r.responsavel_role));
+    if(rotinasHoje.length === 0){ el.innerHTML = ''; return; }
+    const pendentes = rotinasHoje.filter(r => !r.concluida).length;
+    el.innerHTML = `
+      <div class="rotina-alerta-card">
+        <div class="rotina-alerta-titulo">📋 Rotinas de hoje ${pendentes>0 ? `— ${pendentes} pendente(s)` : '— tudo concluído ✓'}</div>
+        ${rotinasHoje.map(r => `
+          <div class="rotina-item ${r.concluida?'concluida':''}">
+            <div>
+              <div class="rotina-item-titulo" style="font-weight:500;font-size:13px">${r.titulo}${roles.length>1?` <span style="color:#888;font-weight:400">— ${ROLE_ROTINA_LABEL[r.responsavel_role]}</span>`:''}</div>
+              ${r.descricao ? `<div style="color:#888;font-size:12px">${r.descricao}</div>` : ''}
+              ${r.concluida && r.concluido_por_nome ? `<div style="color:#1e7e34;font-size:11px">Concluída por ${r.concluido_por_nome}</div>` : ''}
+            </div>
+            <button class="btn btn-sm ${r.concluida?'':'btn-dark'}" onclick="alternarConclusaoRotina(${r.id}, ${r.concluida}, '${containerId}', ${JSON.stringify(roles)})">${r.concluida ? 'Desmarcar' : 'Concluir'}</button>
+          </div>`).join('')}
+      </div>`;
+  }catch(e){ /* alerta silencioso, não trava a tela principal */ }
+}
+async function alternarConclusaoRotina(id, estavaConcluida, containerId, roles){
+  try{
+    if(estavaConcluida){
+      await api(`/api/rotinas/${id}/concluir`, { method:'DELETE' });
+    } else {
+      await api(`/api/rotinas/${id}/concluir`, { method:'POST' });
+    }
+    renderAlertaRotinas(containerId, roles);
   }catch(e){ toast('Erro: '+e.message); }
 }
 

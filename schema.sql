@@ -289,6 +289,35 @@ CREATE INDEX IF NOT EXISTS idx_pedidos_status ON pedidos_compra(status);
 CREATE INDEX IF NOT EXISTS idx_pedidos_entrega ON pedidos_compra(data_entrega_prevista);
 
 -- ═══════════════════════════════════════════════════════════
+-- ROTINAS (tarefas recorrentes de Estoque/Compras — ex: "toda segunda
+-- contar embalagens", "pedido de embalagens toda quarta", "revisar
+-- potes de sopa 1x no mês")
+-- ═══════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS rotinas (id SERIAL PRIMARY KEY);
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS titulo VARCHAR(200);
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS descricao TEXT;
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS responsavel_role VARCHAR(20) DEFAULT 'operador'; -- operador | planejador | admin
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS frequencia VARCHAR(20) DEFAULT 'semanal'; -- semanal | mensal
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS dia_semana INTEGER; -- 0=domingo..6=sábado (frequência semanal)
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS dia_mes INTEGER; -- 1 a 28 (frequência mensal — evita problema de meses curtos)
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS criado_por INTEGER REFERENCES usuarios(id);
+ALTER TABLE rotinas ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+
+-- Histórico de conclusão: 1 linha por rotina, por dia em que foi concluída.
+CREATE TABLE IF NOT EXISTS rotina_execucoes (id SERIAL PRIMARY KEY);
+ALTER TABLE rotina_execucoes ADD COLUMN IF NOT EXISTS rotina_id INTEGER REFERENCES rotinas(id) ON DELETE CASCADE;
+ALTER TABLE rotina_execucoes ADD COLUMN IF NOT EXISTS data DATE DEFAULT CURRENT_DATE;
+ALTER TABLE rotina_execucoes ADD COLUMN IF NOT EXISTS concluido_por INTEGER REFERENCES usuarios(id);
+ALTER TABLE rotina_execucoes ADD COLUMN IF NOT EXISTS concluido_em TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rotina_execucoes_unica') THEN
+    ALTER TABLE rotina_execucoes ADD CONSTRAINT rotina_execucoes_unica UNIQUE (rotina_id, data);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_rotina_exec_data ON rotina_execucoes(data);
+
+-- ═══════════════════════════════════════════════════════════
 -- MIGRAÇÃO A PARTIR DA v1 (opcional)
 -- Se você já tem dados na v1 (produtos, fornecedores, lotes, embalagens)
 -- e quer aproveitar produtos/fornecedores, rode isto DEPOIS de criar
