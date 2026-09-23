@@ -650,12 +650,13 @@ app.get('/api/dashboard', async (req, res) => {
 
     const valorPorCategoria = await pool.query(
       `SELECT COALESCE(c.nome,'Sem categoria') AS categoria,
+              COALESCE(c.tipo,'produtivo') AS tipo,
               SUM(l.quantidade_atual * COALESCE(l.preco_unitario,0)) AS valor,
               SUM(l.quantidade_atual) AS quantidade
        FROM lotes l JOIN produtos p ON p.id=l.produto_id
        LEFT JOIN categorias c ON c.id = p.categoria_id
        WHERE l.quantidade_atual > 0
-       GROUP BY c.nome ORDER BY valor DESC`
+       GROUP BY c.nome, c.tipo ORDER BY valor DESC`
     );
 
     const vencendo = await pool.query(

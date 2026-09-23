@@ -252,12 +252,15 @@ tr:hover td{background:#fafaf7}
     </div>
     <div class="card" style="margin-bottom:16px">
       <div class="card-title">Movimento por dia (dias úteis) e saldo de estoque</div>
-      <div style="height:280px"><canvas id="d-chart-entradas"></canvas></div>
+      <div style="height:180px"><canvas id="d-chart-entradas"></canvas></div>
     </div>
     <div class="grid2">
       <div class="card">
         <div class="card-title">Valor de estoque por categoria</div>
-        <div id="d-categorias"></div>
+        <div style="font-size:11px;font-weight:700;color:#1e7e34;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Produtivos</div>
+        <div id="d-categorias-produtivo"></div>
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px">Não produtivos</div>
+        <div id="d-categorias-nao-produtivo"></div>
       </div>
       <div class="card">
         <div class="card-title">Lotes próximos do vencimento</div>
@@ -418,7 +421,7 @@ tr:hover td{background:#fafaf7}
 
   <!-- ESTOQUE / LOTES -->
   <section class="screen" id="s-estoque">
-    <h1>Estoque</h1>
+    <h1>Posição de Estoque</h1>
     <p class="sub">Saldo em estoque, por lote ou agrupado por produto</p>
     <div class="grid2" style="margin-bottom:16px">
       <div class="metric"><div class="metric-lbl">Valor total em estoque</div><div class="metric-val" id="est-valor-geral">—</div></div>
@@ -859,7 +862,7 @@ const SCREENS = [
   {id:'usuarios', icon:'users', label:'Usuários', grupo:'Cadastros', roles:['admin']},
   {id:'entrada', icon:'entrada', label:'Entrada', grupo:'Operação', roles:['admin','planejador','operador']},
   {id:'saida', icon:'saida', label:'Saída', grupo:'Operação', roles:['admin','planejador','operador']},
-  {id:'estoque', icon:'box', label:'Estoque', grupo:'Operação', roles:['admin','planejador','operador']},
+  {id:'estoque', icon:'box', label:'Posição de Estoque', grupo:'Operação', roles:['admin','planejador','operador']},
   {id:'inventario', icon:'calc', label:'Inventário', grupo:'Operação', roles:['admin','planejador','operador']},
   {id:'receber-pedido', icon:'entrada', label:'Receber pedido', grupo:'Operação', roles:['admin','planejador','operador']},
   {id:'movimentacoes', icon:'list', label:'Movimentações', grupo:'Operação', roles:['admin','planejador']},
@@ -1037,14 +1040,16 @@ async function carregarDashboard(){
     document.getElementById('d-produtos-count').textContent = produtos.length;
 
     const maxValor = Math.max(1, ...d.valor_por_categoria.map(c=>parseFloat(c.valor)));
-    document.getElementById('d-categorias').innerHTML = d.valor_por_categoria.length
-      ? d.valor_por_categoria.map(c => `
+    const renderCats = (lista) => lista.length
+      ? lista.map(c => `
         <div class="cat-row">
           <div class="cat-name">${c.categoria}</div>
           <div class="cat-bar-wrap"><div class="cat-bar" style="width:${(parseFloat(c.valor)/maxValor*100).toFixed(0)}%"></div></div>
           <div class="cat-val">${fmtMoeda(c.valor)}</div>
         </div>`).join('')
-      : '<p style="color:#aaa;font-size:12px">Sem dados de estoque ainda</p>';
+      : '<p style="color:#aaa;font-size:12px">Nenhuma categoria nesse grupo</p>';
+    document.getElementById('d-categorias-produtivo').innerHTML = renderCats(d.valor_por_categoria.filter(c => c.tipo !== 'nao_produtivo'));
+    document.getElementById('d-categorias-nao-produtivo').innerHTML = renderCats(d.valor_por_categoria.filter(c => c.tipo === 'nao_produtivo'));
 
     document.getElementById('d-vencendo').innerHTML = d.lotes_vencendo.length
       ? d.lotes_vencendo.map(l => `
@@ -1064,7 +1069,7 @@ async function carregarDashboard(){
 let chartEntradasPorDia = null;
 async function renderGraficoEntradasPorDia(saldoAtual){
   if(typeof Chart === 'undefined') return;
-  const DIAS_UTEIS = 14;
+  const DIAS_UTEIS = 7;
   // busca uma janela de calendário maior pra garantir 14 dias ÚTEIS depois de tirar fins de semana
   let dados = { entradas: [], saidas: [], ajustes: [] };
   try{ dados = await api(`/api/dashboard/entradas-por-dia?dias=28`); }catch(e){ return; }
@@ -1115,6 +1120,7 @@ async function renderGraficoEntradasPorDia(saldoAtual){
   const ctx = document.getElementById('d-chart-entradas').getContext('2d');
   if(chartEntradasPorDia) chartEntradasPorDia.destroy();
   const temDatalabels = typeof ChartDataLabels !== 'undefined';
+  const fmtMoedaSemDecimal = v => Math.round(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits:0, maximumFractionDigits:0 });
   chartEntradasPorDia = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -1123,12 +1129,12 @@ async function renderGraficoEntradasPorDia(saldoAtual){
         {
           type: 'bar', label: 'Entradas (R$)', data: entradasVals,
           backgroundColor: '#1e7e34', borderRadius: 4, order: 2,
-          datalabels: { color: '#1e7e34', anchor: 'end', align: 'top', font: { size: 9 }, formatter: v => v ? fmtMoeda(v) : '' }
+          datalabels: { color: '#1e7e34', anchor: 'end', align: 'top', font: { size: 9 }, formatter: v => v ? fmtMoedaSemDecimal(v) : '' }
         },
         {
           type: 'bar', label: 'Saídas (R$)', data: saidasVals,
           backgroundColor: '#1a56db', borderRadius: 4, order: 2,
-          datalabels: { color: '#1a56db', anchor: 'end', align: 'top', font: { size: 9 }, formatter: v => v ? fmtMoeda(v) : '' }
+          datalabels: { color: '#1a56db', anchor: 'end', align: 'top', font: { size: 9 }, formatter: v => v ? fmtMoedaSemDecimal(v) : '' }
         },
         {
           type: 'line', label: 'Saldo de estoque (R$)', data: saldos,
@@ -1143,12 +1149,13 @@ async function renderGraficoEntradasPorDia(saldoAtual){
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: true, position: 'bottom' },
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
         datalabels: { display: temDatalabels }
       },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: v => fmtMoeda(v) } },
-        ySaldo: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fmtMoeda(v) } }
+        y: { beginAtZero: true, ticks: { callback: v => fmtMoedaSemDecimal(v), font: { size: 9 } } },
+        ySaldo: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fmtMoedaSemDecimal(v), font: { size: 9 } } },
+        x: { ticks: { font: { size: 9 } } }
       }
     }
   });
@@ -1163,7 +1170,7 @@ async function carregarInicio(){
     {id:'entrada', label:'Entrada', icon:'entrada', cor:'var(--brand)'},
     {id:'saida', label:'Saída', icon:'saida', cor:'#1a56db'},
     {id:'inventario', label:'Inventário', icon:'calc', cor:'#5f5e5a'},
-    {id:'estoque', label:'Estoque', icon:'box', cor:'#5f5e5a'},
+    {id:'estoque', label:'Posição de Estoque', icon:'box', cor:'#5f5e5a'},
     {id:'produtos', label:'Produtos', icon:'scale', cor:'#5f5e5a'},
     {id:'fornecedores', label:'Fornecedores', icon:'truck', cor:'#5f5e5a'},
     {id:'receber-pedido', label:'Receber pedido', icon:'clipboard', cor:'#5f5e5a'}
@@ -3241,19 +3248,19 @@ async function renderAlertaRotinas(containerId, roles){
               ${r.descricao ? `<div style="color:#888;font-size:12px">${r.descricao}</div>` : ''}
               ${r.concluida && r.concluido_por_nome ? `<div style="color:#1e7e34;font-size:11px">Concluída por ${r.concluido_por_nome}</div>` : ''}
             </div>
-            <button class="btn btn-sm ${r.concluida?'':'btn-dark'}" onclick="alternarConclusaoRotina(${r.id}, ${r.concluida}, '${containerId}', ${JSON.stringify(roles)})">${r.concluida ? 'Desmarcar' : 'Concluir'}</button>
+            <button class="btn btn-sm ${r.concluida?'':'btn-dark'}" onclick="alternarConclusaoRotina(${r.id}, ${r.concluida}, '${containerId}', '${roles.join(',')}')">${r.concluida ? 'Desmarcar' : 'Concluir'}</button>
           </div>`).join('')}
       </div>`;
   }catch(e){ /* alerta silencioso, não trava a tela principal */ }
 }
-async function alternarConclusaoRotina(id, estavaConcluida, containerId, roles){
+async function alternarConclusaoRotina(id, estavaConcluida, containerId, rolesStr){
   try{
     if(estavaConcluida){
       await api(`/api/rotinas/${id}/concluir`, { method:'DELETE' });
     } else {
       await api(`/api/rotinas/${id}/concluir`, { method:'POST' });
     }
-    renderAlertaRotinas(containerId, roles);
+    renderAlertaRotinas(containerId, rolesStr.split(','));
   }catch(e){ toast('Erro: '+e.message); }
 }
 
