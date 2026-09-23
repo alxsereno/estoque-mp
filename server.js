@@ -322,6 +322,20 @@ app.get('/api/produtos/:id/codigos', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+// Todos os códigos de barras de todos os produtos, numa única consulta —
+// usado na tela Produtos pra evitar 1 requisição por produto (N+1).
+app.get('/api/produto-codigos', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT pc.*, f.nome AS fornecedor_nome
+       FROM produto_codigos pc
+       LEFT JOIN fornecedores f ON f.id = pc.fornecedor_id
+       ORDER BY pc.produto_id, pc.created_at DESC`
+    );
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 // Último lote recebido de um produto — usado como referência de preço
 // na hora de montar um novo pedido de compra.
 app.get('/api/produtos/:id/ultimo-lote', async (req, res) => {

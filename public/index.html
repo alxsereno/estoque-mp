@@ -1972,11 +1972,17 @@ async function carregarProdutos(){
   atualizarSelectUnidadeBase();
   const tbody = document.getElementById('prod-tbody');
   tbody.innerHTML = '<tr><td colspan="6" style="color:#aaa">Carregando...</td></tr>';
-  produtosCache = await Promise.all(produtos.map(async p => {
-    let codigos = [];
-    try{ codigos = await api(`/api/produtos/${p.id}/codigos`); }catch{}
-    return { ...p, codigos };
-  }));
+  // 1 única requisição com todos os códigos de todos os produtos, em vez
+  // de 1 requisição por produto (evita sobrecarregar o servidor quando o
+  // catálogo cresce — com 500 produtos isso já eram 500 chamadas simultâneas).
+  let todosCodigos = [];
+  try{ todosCodigos = await api('/api/produto-codigos'); }catch{}
+  const codigosPorProduto = {};
+  todosCodigos.forEach(c => {
+    if(!codigosPorProduto[c.produto_id]) codigosPorProduto[c.produto_id] = [];
+    codigosPorProduto[c.produto_id].push(c);
+  });
+  produtosCache = produtos.map(p => ({ ...p, codigos: codigosPorProduto[p.id] || [] }));
   renderProdutos();
 }
 function renderProdutos(){
