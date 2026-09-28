@@ -13,7 +13,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--brand:#1e7e34;--brand-dark:#166b2b;--brand-soft:#e6f4ea;}
 body{font-family:system-ui,sans-serif;background:#faf9f6;color:#1a1a18;font-size:14px}
-.app{display:flex;flex-direction:column;height:100vh}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:#fff;border-bottom:1px solid #e5e5e0;flex-shrink:0}
 .topbar-left{display:flex;align-items:center;gap:10px}
 .topbar-icon{width:34px;height:34px;border-radius:9px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
@@ -32,7 +32,7 @@ nav{flex:1;padding:12px 10px;overflow-y:auto}
 .nav-item:hover{background:#f8f8f5;color:#1a1a18}
 .nav-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
 .nav-icon{width:17px;height:17px;flex-shrink:0}
-.content{flex:1;overflow-y:auto;padding:28px 32px}
+.content{flex:1;min-width:0;overflow-y:auto;padding:28px 32px}
 .screen{display:none}.screen.active{display:block}
 h1{font-size:20px;font-weight:600;margin-bottom:4px}
 .sub{color:#888;font-size:13px;margin-bottom:24px}
@@ -70,6 +70,29 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;font-size:11px;font-weight:600;color:#888;padding:0 12px 10px;border-bottom:1px solid #e5e5e0;text-transform:uppercase;letter-spacing:.04em}
 .th-sort{cursor:pointer;user-select:none}
 .th-sort:hover{color:#1a1a18}
+#s-estoque.active{display:flex;flex-direction:column;height:100%}
+.content.content-compacto{padding:14px 20px}
+.est-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;flex:none}
+.est-titulo{font-size:18px;font-weight:600;margin:0}
+.est-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.est-chip{font-size:12px;color:#666;padding:3px 10px;border-radius:8px}
+.est-chip b{font-size:13px;font-weight:600;color:#1a1a18}
+.est-chip-filtrado{background:var(--brand-soft);color:var(--brand-dark)}
+.est-chip-filtrado b{color:var(--brand-dark)}
+.est-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;flex:none}
+.est-toolbar .view-toggle{margin:0}
+.est-toolbar .view-toggle button{padding:6px 12px}
+.est-toolbar input,.est-toolbar select{height:32px;padding:0 8px;font-size:12px;width:auto}
+.est-toolbar input{width:170px}
+.est-toolbar select{max-width:170px}
+.est-toolbar-espaco{flex:1}
+.btn-icone{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #ddd;border-radius:7px;background:#fff;color:#444;cursor:pointer;flex:none}
+.btn-icone:hover{background:#f5f5f2}
+.est-tabela{flex:1;min-height:160px;overflow:auto;background:#fff;border:1px solid #e5e5e0;border-radius:10px}
+.tbl-estoque{border-collapse:separate;border-spacing:0}
+.tbl-estoque th{position:sticky;top:0;z-index:2;background:#fff;padding:8px;border-bottom:1px solid #e5e5e0;white-space:nowrap}
+.tbl-estoque td{padding:6px 8px;white-space:nowrap}
+.tbl-estoque td.c-trunc{max-width:240px;overflow:hidden;text-overflow:ellipsis}
 td{padding:10px 12px;border-bottom:1px solid #f0f0ea;vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#fafaf7}
@@ -128,6 +151,8 @@ tr:hover td{background:#fafaf7}
   #print-area{display:block!important}
   .no-print{display:none!important}
   #toast{display:none!important}
+  #app-shell{display:none!important}
+  #login-screen{display:none!important}
   #modal-root{display:none!important}
   body{background:#fff;font-size:12px}
   @page{size:A4;margin:15mm}
@@ -421,18 +446,19 @@ tr:hover td{background:#fafaf7}
 
   <!-- ESTOQUE / LOTES -->
   <section class="screen" id="s-estoque">
-    <h1>Posição de Estoque</h1>
-    <p class="sub">Saldo em estoque, por lote ou agrupado por produto</p>
-    <div class="grid2" style="margin-bottom:16px">
-      <div class="metric"><div class="metric-lbl">Valor total em estoque</div><div class="metric-val" id="est-valor-geral">—</div></div>
-      <div class="metric" style="background:var(--brand-soft)"><div class="metric-lbl">Valor dos itens filtrados</div><div class="metric-val" id="est-valor-filtrado" style="color:var(--brand-dark)">—</div></div>
+    <div class="est-topo">
+      <h1 class="est-titulo">Posição de Estoque</h1>
+      <div class="est-chips">
+        <span class="est-chip">Total em estoque <b id="est-valor-geral">—</b></span>
+        <span class="est-chip est-chip-filtrado">Filtrado <b id="est-valor-filtrado">—</b></span>
+      </div>
     </div>
-    <div class="view-toggle">
-      <button id="est-view-lote" class="active" onclick="mudarVisaoEstoque('lote')">Por lote</button>
-      <button id="est-view-produto" onclick="mudarVisaoEstoque('produto')">Agrupado por produto</button>
-    </div>
-    <div class="filter-row">
-      <input type="text" id="est-busca" placeholder="Buscar produto..." oninput="renderEstoque()">
+    <div class="est-toolbar">
+      <div class="view-toggle">
+        <button id="est-view-lote" class="active" onclick="mudarVisaoEstoque('lote')">Por lote</button>
+        <button id="est-view-produto" onclick="mudarVisaoEstoque('produto')">Agrupado por produto</button>
+      </div>
+      <input type="text" id="est-busca" placeholder="Buscar produto" oninput="renderEstoque()">
       <select id="est-categoria" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
       <select id="est-status-estoque" onchange="renderEstoque()">
         <option value="">Estoque: todos</option>
@@ -448,10 +474,15 @@ tr:hover td{background:#fafaf7}
         <option value="Ok">Ok</option>
         <option value="Sem validade">Sem validade</option>
       </select>
-      <button class="btn" onclick="exportarEstoqueExcel()">📊 Exportar Excel</button>
-      <button class="btn" onclick="exportarEstoquePDF()">🖨️ Gerar PDF</button>
+      <span class="est-toolbar-espaco"></span>
+      <button class="btn-icone" title="Exportar Excel" aria-label="Exportar Excel" onclick="exportarEstoqueExcel()">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M4 15h16M10 3v18"/></svg>
+      </button>
+      <button class="btn-icone" title="Gerar PDF" aria-label="Gerar PDF" onclick="exportarEstoquePDF()">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="2"/><path d="M7 14h10v7H7z"/></svg>
+      </button>
     </div>
-    <div class="card" id="est-card-lote"><table>
+    <div class="est-tabela" id="est-card-lote"><table class="tbl-estoque">
       <thead><tr>
         <th>Lote</th>
         <th class="th-sort" onclick="ordenarEstoquePor('produto')">Produto<span id="est-arrow-lote-produto"></span></th>
@@ -467,7 +498,7 @@ tr:hover td{background:#fafaf7}
       </tr></thead>
       <tbody id="est-tbody"></tbody>
     </table></div>
-    <div class="card" id="est-card-produto" style="display:none"><table>
+    <div class="est-tabela" id="est-card-produto" style="display:none"><table class="tbl-estoque">
       <thead><tr>
         <th>Código</th>
         <th class="th-sort" onclick="ordenarEstoquePor('produto')">Produto<span id="est-arrow-prod-produto"></span></th>
@@ -820,7 +851,7 @@ function fazerLogout(){
 }
 async function entrarNoApp(){
   document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app-shell').style.display = 'block';
+  document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('topbar-user-nome').textContent = sessaoUsuario.nome;
   document.getElementById('topbar-user-role').textContent = ROLE_LABEL[sessaoUsuario.role] || sessaoUsuario.role;
   document.getElementById('topbar-avatar').textContent = sessaoUsuario.nome.slice(0,2).toUpperCase();
@@ -905,6 +936,9 @@ function showScreen(id){
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('s-'+id).classList.add('active');
   document.querySelector(`.nav-item[data-screen="${id}"]`).classList.add('active');
+  const areaConteudo = document.querySelector('.content');
+  areaConteudo.classList.toggle('content-compacto', id === 'estoque');
+  areaConteudo.scrollTop = 0;
   const fn = CARREGADORES[id];
   if(fn){
     Promise.resolve(fn()).catch(e => toast('Erro ao carregar: ' + e.message));
@@ -959,6 +993,9 @@ function abrirScanner(inputId, onLido){
 }
 function fmtMoeda(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function fmtNum(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{maximumFractionDigits:4}); }
+// Quantidades de estoque (kg, l, un): sempre 3 casas depois da vírgula.
+function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function fmtQtd(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3}); }
 function fmtData(v){ if(!v) return '—'; const d = new Date(v); if(isNaN(d)) return v; return d.toLocaleDateString('pt-BR',{timeZone:'UTC'}); }
 function catBadge(nome){
   if(!nome) return '<span style="color:#aaa">—</span>';
@@ -1057,7 +1094,7 @@ async function carregarDashboard(){
           <div class="alert-dot ${l.criticidade==='critico'?'dot-danger':'dot-warn'}"></div>
           <div>
             <strong>${l.produto_descricao}</strong> — lote <span class="lote-tag">${l.codigo_lote}</span><br>
-            <span style="color:#888">Vence em ${fmtData(l.data_validade)} (${l.dias_restantes} dias) · ${fmtNum(l.quantidade_atual)} ${l.unidade}</span>
+            <span style="color:#888">Vence em ${fmtData(l.data_validade)} (${l.dias_restantes} dias) · ${fmtQtd(l.quantidade_atual)} ${l.unidade}</span>
           </div>
         </div>`).join('')
       : '<p style="color:#aaa;font-size:12px">Nenhum lote vencendo nos próximos dias</p>';
@@ -1441,7 +1478,7 @@ function calcularResumoEntrada(){
   const valorTotal = qtd * precoPago;
   const precoBase = qtdTotal > 0 ? valorTotal / qtdTotal : 0;
 
-  document.getElementById('ent-out-qtd-campo').value = qtdTotal ? fmtNum(qtdTotal) : '';
+  document.getElementById('ent-out-qtd-campo').value = qtdTotal ? fmtQtd(qtdTotal) : '';
   document.getElementById('ent-out-valor-campo').value = valorTotal ? fmtMoeda(valorTotal) : '';
   document.getElementById('ent-out-precokg').textContent = precoBase > 0 ? (fmtMoeda(precoBase) + ' / ' + unidadeBase) : '—';
 }
@@ -1548,7 +1585,7 @@ async function imprimirEtiquetaLote(){
       <div style="font-size:13px;font-weight:700">${entradaAtual.produto.descricao}</div>
       <div style="font-size:10px;color:#555;margin-bottom:4px">Lote: ${lote.codigo_lote}</div>
       <svg id="etq-barcode"></svg>
-      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtNum(lote.quantidade_total)} ${lote.unidade}</div>
+      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtQtd(lote.quantidade_total)} ${lote.unidade}</div>
     </div>`;
   JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:42, fontSize:12 });
   await api(`/api/lotes/${lote.id}/etiqueta-impressa`, { method:'PATCH' });
@@ -1647,7 +1684,7 @@ function mostrarLotesSaida(lotes){
         <div style="color:#888;font-size:12px;margin-top:4px">Entrada: ${fmtData(l.data_entrada)} · Validade: ${fmtData(l.data_validade)} · Fornecedor: ${l.fornecedor_nome||'—'}</div>
       </div>
       <div style="text-align:right">
-        <div style="font-weight:600">${fmtNum(l.quantidade_atual)} ${l.unidade}</div>
+        <div style="font-weight:600">${fmtQtd(l.quantidade_atual)} ${l.unidade}</div>
       </div>
     </div>`).join('');
 }
@@ -1660,7 +1697,7 @@ function selecionarLoteSaidaJSON(el){
 function selecionarLoteSaida(lote){
   saidaAtual = { lote };
   document.getElementById('sai-form-card').style.display = 'block';
-  document.getElementById('sai-qtd-disponivel').value = fmtNum(lote.quantidade_atual) + ' ' + lote.unidade;
+  document.getElementById('sai-qtd-disponivel').value = fmtQtd(lote.quantidade_atual) + ' ' + lote.unidade;
   document.getElementById('sai-qtd').value = '';
   document.getElementById('sai-qtd').max = lote.quantidade_atual;
 }
@@ -1816,11 +1853,11 @@ function estoqueAgrupadoPorProduto(filtrado){
     const p = produtos.find(x => x.id === g.produto_id);
     return {
       ...g,
-      volumesTxt: Object.entries(g.volumes).map(([un,qtd]) => `${fmtNum(qtd)} ${un}`).join(', ') || '—',
+      volumesTxt: Object.entries(g.volumes).map(([un,qtd]) => `${fmtQtd(qtd)} ${un}`).join(', ') || '—',
       valorUnitario: g.qtd > 0 ? (g.valor / g.qtd) : 0,
       statusEstoque: statusEstoque(g.produto_id, g.qtd),
-      estoqueMin: p && p.estoque_minimo != null ? fmtNum(p.estoque_minimo) : '—',
-      estoqueMax: p && p.estoque_maximo != null ? fmtNum(p.estoque_maximo) : '—'
+      estoqueMin: p && p.estoque_minimo != null ? fmtQtd(p.estoque_minimo) : '—',
+      estoqueMax: p && p.estoque_maximo != null ? fmtQtd(p.estoque_maximo) : '—'
     };
   });
 }
@@ -1864,12 +1901,12 @@ function renderEstoque(){
       const st = l.statusValidadeObj;
       return `<tr>
       <td><span class="lote-tag">${l.codigo_lote}</span></td>
-      <td>${l.produto_descricao}</td>
+      <td class="c-trunc" title="${escAttr(l.produto_descricao)}">${l.produto_descricao}</td>
       <td>${catBadge(l.categoria)}</td>
-      <td>${fmtNum(l.quantidade_atual)} ${l.unidade}</td>
+      <td>${fmtQtd(l.quantidade_atual)} ${l.unidade}</td>
       <td>${fmtData(l.data_validade)}</td>
       <td><span class="badge ${st.cls}"><span class="status-dot" style="background:${st.dot}"></span>${st.label}</span></td>
-      <td>${l.fornecedor_nome||'—'}</td>
+      <td class="c-trunc" title="${escAttr(l.fornecedor_nome)}">${l.fornecedor_nome||'—'}</td>
       <td>${l.valorUn ? fmtMoeda(l.valorUn) + ' / ' + l.unidade : '—'}</td>
       <td>${l.valorUn ? fmtMoeda(l.valorTotalLote) : '—'}</td>
       <td>${l.possui_codigo_barras ? '<span class="badge badge-gray">Cód. fornecedor</span>' : (l.etiqueta_impressa ? '<span class="badge badge-ok">Impressa</span>' : '<span class="badge badge-warn">Pendente</span>')}</td>
@@ -1880,9 +1917,9 @@ function renderEstoque(){
     atualizarSetasOrdenacao('prod');
     document.getElementById('est-produto-tbody').innerHTML = linhas.map(g => `<tr>
         <td>${g.produto_codigo||'—'}</td>
-        <td>${g.produto_descricao}</td>
+        <td class="c-trunc" title="${escAttr(g.produto_descricao)}">${g.produto_descricao}</td>
         <td>${catBadge(g.categoria)}</td>
-        <td>${fmtNum(g.qtd)} ${g.unidade}</td>
+        <td>${fmtQtd(g.qtd)} ${g.unidade}</td>
         <td>${g.volumesTxt}</td>
         <td>${g.estoqueMin}</td>
         <td>${g.estoqueMax}</td>
@@ -1916,6 +1953,11 @@ function exportarEstoqueExcel(){
     ]);
   }
   const ws = XLSX.utils.aoa_to_sheet([headers, ...linhas]);
+  const colQtd = tipo === 'lote' ? 3 : 2;
+  for(let r = 1; r <= linhas.length; r++){
+    const ref = XLSX.utils.encode_cell({ r, c: colQtd });
+    if(ws[ref] && typeof ws[ref].v === 'number') ws[ref].z = '#,##0.000';
+  }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Estoque');
   const dataHoje = new Date().toISOString().slice(0,10);
@@ -1941,12 +1983,12 @@ function exportarEstoquePDF(){
     tabelaHtml = `<table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr>${['Lote','Produto','Categoria','Qtd. atual','Validade','Status','Fornecedor','Valor unit.','Valor total'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
       <tbody>${dados.map(l => {
-        return `<tr>${[l.codigo_lote, l.produto_descricao, l.categoria||'—', fmtNum(l.quantidade_atual)+' '+l.unidade, fmtData(l.data_validade), l.statusValidadeObj.label, l.fornecedor_nome||'—', l.valorUn?fmtMoeda(l.valorUn)+'/'+l.unidade:'—', l.valorUn?fmtMoeda(l.valorTotalLote):'—'].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`;
+        return `<tr>${[l.codigo_lote, l.produto_descricao, l.categoria||'—', fmtQtd(l.quantidade_atual)+' '+l.unidade, fmtData(l.data_validade), l.statusValidadeObj.label, l.fornecedor_nome||'—', l.valorUn?fmtMoeda(l.valorUn)+'/'+l.unidade:'—', l.valorUn?fmtMoeda(l.valorTotalLote):'—'].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`;
       }).join('')}</tbody></table>`;
   } else {
     tabelaHtml = `<table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr>${['Código','Produto','Categoria','Qtd. total','Volumes','Mín.','Máx.','Validade','Estoque','Valor total','Valor unitário'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
-      <tbody>${dados.map(g => `<tr>${[g.produto_codigo||'—', g.produto_descricao, g.categoria||'—', fmtNum(g.qtd)+' '+g.unidade, g.volumesTxt, g.estoqueMin, g.estoqueMax, g.piorStatus.label, g.statusEstoque.label, fmtMoeda(g.valor), fmtMoeda(g.valorUnitario)+'/'+g.unidade].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      <tbody>${dados.map(g => `<tr>${[g.produto_codigo||'—', g.produto_descricao, g.categoria||'—', fmtQtd(g.qtd)+' '+g.unidade, g.volumesTxt, g.estoqueMin, g.estoqueMax, g.piorStatus.label, g.statusEstoque.label, fmtMoeda(g.valor), fmtMoeda(g.valorUnitario)+'/'+g.unidade].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
   area.innerHTML = `
     <div style="font-family:sans-serif">
@@ -1962,7 +2004,7 @@ async function reimprimirEtiqueta(lote){
       <div style="font-size:13px;font-weight:700">${lote.produto_descricao}</div>
       <div style="font-size:10px;color:#555;margin-bottom:4px">Lote: ${lote.codigo_lote}</div>
       <svg id="etq-barcode"></svg>
-      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtNum(lote.quantidade_atual)} ${lote.unidade}</div>
+      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtQtd(lote.quantidade_atual)} ${lote.unidade}</div>
     </div>`;
   JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:42, fontSize:12 });
   window.print();
@@ -2219,7 +2261,7 @@ function editarCategoria(id, nome, cor, tipo){
   document.getElementById('cat-cor').value = cor;
   document.getElementById('cat-tipo').value = tipo;
   document.getElementById('cat-salvar-btn').textContent = 'Salvar alterações';
-  window.scrollTo({top:0, behavior:'smooth'});
+  document.querySelector('.content').scrollTo({top:0, behavior:'smooth'});
 }
 async function criarCategoria(){
   const nome = document.getElementById('cat-nome').value.trim();
@@ -2431,7 +2473,7 @@ async function carregarMovimentacoes(){
       <td>${m.produto||'—'}</td>
       <td>${catBadge(m.categoria)}</td>
       <td>${m.codigo_lote?`<span class="lote-tag">${m.codigo_lote}</span>`:'—'}</td>
-      <td>${fmtNum(m.quantidade)} ${m.unidade||''}</td>
+      <td>${fmtQtd(m.quantidade)} ${m.unidade||''}</td>
       <td>${m.valor_total?fmtMoeda(m.valor_total):'—'}</td>
       <td>${m.destino||m.obs||'—'}</td>
     </tr>`).join('') || '<tr><td colspan="9" style="color:#aaa;text-align:center;padding:24px">Nenhuma movimentação encontrada</td></tr>';
@@ -2453,9 +2495,9 @@ async function carregarAjustes(){
       <td>${fmtData(a.data)}</td>
       <td>${a.codigo_lote?`<span class="lote-tag">${a.codigo_lote}</span>`:'—'}</td>
       <td>${a.produto||'—'}</td>
-      <td>${fmtNum(a.antes)}</td>
-      <td>${fmtNum(a.depois)}</td>
-      <td class="${a.diff>0?'':(a.diff<0?'':'')}" style="color:${a.diff>0?'#1e7e34':(a.diff<0?'#c0392b':'#888')};font-weight:600">${a.diff>0?'+':''}${fmtNum(a.diff)}</td>
+      <td>${fmtQtd(a.antes)}</td>
+      <td>${fmtQtd(a.depois)}</td>
+      <td class="${a.diff>0?'':(a.diff<0?'':'')}" style="color:${a.diff>0?'#1e7e34':(a.diff<0?'#c0392b':'#888')};font-weight:600">${a.diff>0?'+':''}${fmtQtd(a.diff)}</td>
       <td>${a.motivo||'—'}</td>
     </tr>`).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum ajuste registrado</td></tr>';
 }
@@ -2477,15 +2519,15 @@ function renderInventario(){
   );
   document.getElementById('inv-tbody').innerHTML = filtrado.map(l => {
     const vol = (l.fator_conversao && parseFloat(l.fator_conversao) > 0)
-      ? fmtNum(parseFloat(l.quantidade_atual) / parseFloat(l.fator_conversao)) + ' ' + (l.unidade_compra || '')
+      ? fmtQtd(parseFloat(l.quantidade_atual) / parseFloat(l.fator_conversao)) + ' ' + (l.unidade_compra || '')
       : '—';
     return `<tr data-lote-id="${l.id}" data-qtd-sistema="${l.quantidade_atual}">
       <td><span class="lote-tag">${l.codigo_lote}</span></td>
       <td>${l.produto_descricao}</td>
       <td>${catBadge(l.categoria)}</td>
-      <td>${fmtNum(l.quantidade_atual)} ${l.unidade}</td>
+      <td>${fmtQtd(l.quantidade_atual)} ${l.unidade}</td>
       <td>${vol}</td>
-      <td><input type="number" step="0.0001" class="ajuste-input inv-contado" placeholder="${fmtNum(l.quantidade_atual)}" oninput="atualizarDiffInventario(this)"></td>
+      <td><input type="number" step="0.0001" class="ajuste-input inv-contado" placeholder="${fmtQtd(l.quantidade_atual)}" oninput="atualizarDiffInventario(this)"></td>
       <td class="inv-diff diff-zero">—</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum lote em estoque</td></tr>';
@@ -2497,7 +2539,7 @@ function atualizarDiffInventario(input){
   if(input.value === ''){ cell.textContent = '—'; cell.className = 'inv-diff diff-zero'; return; }
   const contado = parseFloat(input.value);
   const diff = contado - qtdSistema;
-  cell.textContent = (diff>0?'+':'') + fmtNum(diff);
+  cell.textContent = (diff>0?'+':'') + fmtQtd(diff);
   cell.className = 'inv-diff ' + (diff>0?'diff-pos':(diff<0?'diff-neg':'diff-zero'));
 }
 async function salvarInventario(){
@@ -3090,7 +3132,7 @@ function calcularResumoReceberItem(itemId){
   card.querySelector('.receber-preco-label').textContent = `Valor unitário (R$)`;
   const qtdTotal = qtdVol * fator;
   const valorTotal = qtdVol * precoVol;
-  card.querySelector('.receber-outqtd-campo').value = qtdTotal ? fmtNum(qtdTotal) : '';
+  card.querySelector('.receber-outqtd-campo').value = qtdTotal ? fmtQtd(qtdTotal) : '';
   card.querySelector('.receber-outtotal-campo').value = valorTotal ? fmtMoeda(valorTotal) : '';
 }
 function fecharRecebimento(){
