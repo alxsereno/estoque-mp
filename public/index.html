@@ -1699,7 +1699,7 @@ let configValidade = { critico: 7, atencao: 30 };
 function checarDataValidade(dataStr){
   if(!dataStr) return { status: 'vazia' };
   const hoje = new Date(); hoje.setHours(0,0,0,0);
-  const val = new Date(dataStr + 'T00:00:00');
+  const val = new Date(String(dataStr).slice(0,10) + 'T00:00:00');
   const dias = Math.round((val - hoje) / 86400000);
   if(dias < 0) return { status: 'invalida', dias };
   if(dias < 3) return { status: 'critica', dias };
@@ -1726,8 +1726,11 @@ function aplicarValidacaoValidade(inputEl, avisoEl){
 function statusValidade(dataValidade){
   if(!dataValidade) return { label: 'Sem validade', cls: 'badge-gray', dot: '#aaa' };
   const hoje = new Date(); hoje.setHours(0,0,0,0);
-  const val = new Date(dataValidade + 'T00:00:00');
+  // O banco devolve DATE como "2026-09-25T00:00:00.000Z" — pega só a parte AAAA-MM-DD
+  // (senão o new Date() fica inválido, os dias viram NaN e tudo cai em "Ok").
+  const val = new Date(String(dataValidade).slice(0,10) + 'T00:00:00');
   const dias = Math.round((val - hoje) / 86400000);
+  if(isNaN(dias)) return { label: 'Sem validade', cls: 'badge-gray', dot: '#aaa' };
   if(dias < 0) return { label: 'Vencido', cls: 'badge-danger', dot: '#c0392b' };
   if(dias <= configValidade.critico) return { label: 'Crítico', cls: 'badge-danger', dot: '#c0392b' };
   if(dias <= configValidade.atencao) return { label: 'Atenção', cls: 'badge-warn', dot: '#b8860b' };
