@@ -70,7 +70,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;font-size:11px;font-weight:600;color:#888;padding:0 12px 10px;border-bottom:1px solid #e5e5e0;text-transform:uppercase;letter-spacing:.04em}
 .th-sort{cursor:pointer;user-select:none}
 .th-sort:hover{color:#1a1a18}
-#s-estoque.active{display:flex;flex-direction:column;height:100%}
+#s-estoque.active,#s-movimentacoes.active{display:flex;flex-direction:column;height:100%}
 .content.content-compacto{padding:14px 20px}
 .est-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;flex:none}
 .est-titulo{font-size:18px;font-weight:600;margin:0}
@@ -84,6 +84,8 @@ th{text-align:left;font-size:11px;font-weight:600;color:#888;padding:0 12px 10px
 .est-toolbar .view-toggle button{padding:6px 12px}
 .est-toolbar input,.est-toolbar select{height:32px;padding:0 8px;font-size:12px;width:auto}
 .est-toolbar input{width:170px}
+.est-toolbar input[type=date]{width:130px}
+.est-rotulo{font-size:12px;color:#888}
 .est-toolbar select{max-width:170px}
 .est-toolbar-espaco{flex:1}
 .btn-icone{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #ddd;border-radius:7px;background:#fff;color:#444;cursor:pointer;flex:none}
@@ -656,10 +658,12 @@ tr:hover td{background:#fafaf7}
 
   <!-- MOVIMENTAÇÕES -->
   <section class="screen" id="s-movimentacoes">
-    <h1>Movimentações</h1>
-    <p class="sub">Histórico de entradas, saídas e devoluções</p>
-    <div class="filter-row">
-      <input type="text" id="mov-filtro-codigo" placeholder="Código ou descrição..." oninput="carregarMovimentacoes()">
+    <div class="est-topo">
+      <h1 class="est-titulo">Movimentações</h1>
+      <div class="est-chips"><span class="est-chip">Registros <b id="mov-total">—</b></span></div>
+    </div>
+    <div class="est-toolbar">
+      <input type="text" id="mov-filtro-codigo" placeholder="Código ou descrição" oninput="agendarMovimentacoes()">
       <select id="mov-filtro-categoria" onchange="carregarMovimentacoes()"><option value="">Todas categorias</option></select>
       <select id="mov-filtro-tipo" onchange="carregarMovimentacoes()">
         <option value="">Todos os tipos</option>
@@ -667,11 +671,16 @@ tr:hover td{background:#fafaf7}
         <option value="saida">Saída</option>
         <option value="devolucao">Devolução</option>
       </select>
+      <span class="est-rotulo">De</span>
       <input type="date" id="mov-filtro-data-de" onchange="carregarMovimentacoes()">
+      <span class="est-rotulo">Até</span>
       <input type="date" id="mov-filtro-data-ate" onchange="carregarMovimentacoes()">
-      <button class="btn btn-sm" onclick="limparFiltrosMovimentacoes()">Limpar filtros</button>
+      <span class="est-toolbar-espaco"></span>
+      <button class="btn-icone" title="Limpar filtros" aria-label="Limpar filtros" onclick="limparFiltrosMovimentacoes()">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
-    <div class="card"><table>
+    <div class="est-tabela"><table class="tbl-estoque">
       <thead><tr><th>Data</th><th>Tipo</th><th>Código</th><th>Produto</th><th>Categoria</th><th>Lote</th><th>Qtd</th><th>Valor</th><th>Destino / Obs</th></tr></thead>
       <tbody id="mov-tbody"></tbody>
     </table></div>
@@ -937,7 +946,7 @@ function showScreen(id){
   document.getElementById('s-'+id).classList.add('active');
   document.querySelector(`.nav-item[data-screen="${id}"]`).classList.add('active');
   const areaConteudo = document.querySelector('.content');
-  areaConteudo.classList.toggle('content-compacto', id === 'estoque');
+  areaConteudo.classList.toggle('content-compacto', id === 'estoque' || id === 'movimentacoes');
   areaConteudo.scrollTop = 0;
   const fn = CARREGADORES[id];
   if(fn){
@@ -993,9 +1002,15 @@ function abrirScanner(inputId, onLido){
 }
 function fmtMoeda(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function fmtNum(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{maximumFractionDigits:4}); }
-// Quantidades de estoque (kg, l, un): sempre 3 casas depois da vírgula.
 function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function fmtQtd(v){ return (v==null?0:parseFloat(v)).toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3}); }
+// Quantidades de estoque. Peso e volume (kg, l) sempre com 3 casas (61,000 kg — colunas alinhadas).
+// Unidades contadas (un, pct, cx, sc, dz, fd...) saem inteiras (2.000 un) e só mostram casas se houver fração (até 3).
+const UNIDADES_3_CASAS = ['kg','l'];
+function fmtQtd(v, unidade){
+  const n = v==null ? 0 : parseFloat(v);
+  const fixa = unidade==null || unidade==='' || UNIDADES_3_CASAS.includes(String(unidade).trim().toLowerCase());
+  return n.toLocaleString('pt-BR', fixa ? {minimumFractionDigits:3,maximumFractionDigits:3} : {minimumFractionDigits:0,maximumFractionDigits:3});
+}
 function fmtData(v){ if(!v) return '—'; const d = new Date(v); if(isNaN(d)) return v; return d.toLocaleDateString('pt-BR',{timeZone:'UTC'}); }
 function catBadge(nome){
   if(!nome) return '<span style="color:#aaa">—</span>';
@@ -1094,7 +1109,7 @@ async function carregarDashboard(){
           <div class="alert-dot ${l.criticidade==='critico'?'dot-danger':'dot-warn'}"></div>
           <div>
             <strong>${l.produto_descricao}</strong> — lote <span class="lote-tag">${l.codigo_lote}</span><br>
-            <span style="color:#888">Vence em ${fmtData(l.data_validade)} (${l.dias_restantes} dias) · ${fmtQtd(l.quantidade_atual)} ${l.unidade}</span>
+            <span style="color:#888">Vence em ${fmtData(l.data_validade)} (${l.dias_restantes} dias) · ${fmtQtd(l.quantidade_atual, l.unidade)} ${l.unidade}</span>
           </div>
         </div>`).join('')
       : '<p style="color:#aaa;font-size:12px">Nenhum lote vencendo nos próximos dias</p>';
@@ -1478,7 +1493,7 @@ function calcularResumoEntrada(){
   const valorTotal = qtd * precoPago;
   const precoBase = qtdTotal > 0 ? valorTotal / qtdTotal : 0;
 
-  document.getElementById('ent-out-qtd-campo').value = qtdTotal ? fmtQtd(qtdTotal) : '';
+  document.getElementById('ent-out-qtd-campo').value = qtdTotal ? fmtQtd(qtdTotal, unidadeBase) : '';
   document.getElementById('ent-out-valor-campo').value = valorTotal ? fmtMoeda(valorTotal) : '';
   document.getElementById('ent-out-precokg').textContent = precoBase > 0 ? (fmtMoeda(precoBase) + ' / ' + unidadeBase) : '—';
 }
@@ -1585,7 +1600,7 @@ async function imprimirEtiquetaLote(){
       <div style="font-size:13px;font-weight:700">${entradaAtual.produto.descricao}</div>
       <div style="font-size:10px;color:#555;margin-bottom:4px">Lote: ${lote.codigo_lote}</div>
       <svg id="etq-barcode"></svg>
-      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtQtd(lote.quantidade_total)} ${lote.unidade}</div>
+      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtQtd(lote.quantidade_total, lote.unidade)} ${lote.unidade}</div>
     </div>`;
   JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:42, fontSize:12 });
   await api(`/api/lotes/${lote.id}/etiqueta-impressa`, { method:'PATCH' });
@@ -1684,7 +1699,7 @@ function mostrarLotesSaida(lotes){
         <div style="color:#888;font-size:12px;margin-top:4px">Entrada: ${fmtData(l.data_entrada)} · Validade: ${fmtData(l.data_validade)} · Fornecedor: ${l.fornecedor_nome||'—'}</div>
       </div>
       <div style="text-align:right">
-        <div style="font-weight:600">${fmtQtd(l.quantidade_atual)} ${l.unidade}</div>
+        <div style="font-weight:600">${fmtQtd(l.quantidade_atual, l.unidade)} ${l.unidade}</div>
       </div>
     </div>`).join('');
 }
@@ -1697,7 +1712,7 @@ function selecionarLoteSaidaJSON(el){
 function selecionarLoteSaida(lote){
   saidaAtual = { lote };
   document.getElementById('sai-form-card').style.display = 'block';
-  document.getElementById('sai-qtd-disponivel').value = fmtQtd(lote.quantidade_atual) + ' ' + lote.unidade;
+  document.getElementById('sai-qtd-disponivel').value = fmtQtd(lote.quantidade_atual, lote.unidade) + ' ' + lote.unidade;
   document.getElementById('sai-qtd').value = '';
   document.getElementById('sai-qtd').max = lote.quantidade_atual;
 }
@@ -1853,11 +1868,11 @@ function estoqueAgrupadoPorProduto(filtrado){
     const p = produtos.find(x => x.id === g.produto_id);
     return {
       ...g,
-      volumesTxt: Object.entries(g.volumes).map(([un,qtd]) => `${fmtQtd(qtd)} ${un}`).join(', ') || '—',
+      volumesTxt: Object.entries(g.volumes).map(([un,qtd]) => `${fmtQtd(qtd, un)} ${un}`).join(', ') || '—',
       valorUnitario: g.qtd > 0 ? (g.valor / g.qtd) : 0,
       statusEstoque: statusEstoque(g.produto_id, g.qtd),
-      estoqueMin: p && p.estoque_minimo != null ? fmtQtd(p.estoque_minimo) : '—',
-      estoqueMax: p && p.estoque_maximo != null ? fmtQtd(p.estoque_maximo) : '—'
+      estoqueMin: p && p.estoque_minimo != null ? fmtQtd(p.estoque_minimo, p.unidade) : '—',
+      estoqueMax: p && p.estoque_maximo != null ? fmtQtd(p.estoque_maximo, p.unidade) : '—'
     };
   });
 }
@@ -1903,7 +1918,7 @@ function renderEstoque(){
       <td><span class="lote-tag">${l.codigo_lote}</span></td>
       <td class="c-trunc" title="${escAttr(l.produto_descricao)}">${l.produto_descricao}</td>
       <td>${catBadge(l.categoria)}</td>
-      <td>${fmtQtd(l.quantidade_atual)} ${l.unidade}</td>
+      <td>${fmtQtd(l.quantidade_atual, l.unidade)} ${l.unidade}</td>
       <td>${fmtData(l.data_validade)}</td>
       <td><span class="badge ${st.cls}"><span class="status-dot" style="background:${st.dot}"></span>${st.label}</span></td>
       <td class="c-trunc" title="${escAttr(l.fornecedor_nome)}">${l.fornecedor_nome||'—'}</td>
@@ -1919,7 +1934,7 @@ function renderEstoque(){
         <td>${g.produto_codigo||'—'}</td>
         <td class="c-trunc" title="${escAttr(g.produto_descricao)}">${g.produto_descricao}</td>
         <td>${catBadge(g.categoria)}</td>
-        <td>${fmtQtd(g.qtd)} ${g.unidade}</td>
+        <td>${fmtQtd(g.qtd, g.unidade)} ${g.unidade}</td>
         <td>${g.volumesTxt}</td>
         <td>${g.estoqueMin}</td>
         <td>${g.estoqueMax}</td>
@@ -1983,12 +1998,12 @@ function exportarEstoquePDF(){
     tabelaHtml = `<table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr>${['Lote','Produto','Categoria','Qtd. atual','Validade','Status','Fornecedor','Valor unit.','Valor total'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
       <tbody>${dados.map(l => {
-        return `<tr>${[l.codigo_lote, l.produto_descricao, l.categoria||'—', fmtQtd(l.quantidade_atual)+' '+l.unidade, fmtData(l.data_validade), l.statusValidadeObj.label, l.fornecedor_nome||'—', l.valorUn?fmtMoeda(l.valorUn)+'/'+l.unidade:'—', l.valorUn?fmtMoeda(l.valorTotalLote):'—'].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`;
+        return `<tr>${[l.codigo_lote, l.produto_descricao, l.categoria||'—', fmtQtd(l.quantidade_atual, l.unidade)+' '+l.unidade, fmtData(l.data_validade), l.statusValidadeObj.label, l.fornecedor_nome||'—', l.valorUn?fmtMoeda(l.valorUn)+'/'+l.unidade:'—', l.valorUn?fmtMoeda(l.valorTotalLote):'—'].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`;
       }).join('')}</tbody></table>`;
   } else {
     tabelaHtml = `<table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr>${['Código','Produto','Categoria','Qtd. total','Volumes','Mín.','Máx.','Validade','Estoque','Valor total','Valor unitário'].map(h=>`<th style="text-align:left;border-bottom:1px solid #333;padding:5px">${h}</th>`).join('')}</tr></thead>
-      <tbody>${dados.map(g => `<tr>${[g.produto_codigo||'—', g.produto_descricao, g.categoria||'—', fmtQtd(g.qtd)+' '+g.unidade, g.volumesTxt, g.estoqueMin, g.estoqueMax, g.piorStatus.label, g.statusEstoque.label, fmtMoeda(g.valor), fmtMoeda(g.valorUnitario)+'/'+g.unidade].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      <tbody>${dados.map(g => `<tr>${[g.produto_codigo||'—', g.produto_descricao, g.categoria||'—', fmtQtd(g.qtd, g.unidade)+' '+g.unidade, g.volumesTxt, g.estoqueMin, g.estoqueMax, g.piorStatus.label, g.statusEstoque.label, fmtMoeda(g.valor), fmtMoeda(g.valorUnitario)+'/'+g.unidade].map(v=>`<td style="padding:5px;border-bottom:1px solid #eee">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
   area.innerHTML = `
     <div style="font-family:sans-serif">
@@ -2004,7 +2019,7 @@ async function reimprimirEtiqueta(lote){
       <div style="font-size:13px;font-weight:700">${lote.produto_descricao}</div>
       <div style="font-size:10px;color:#555;margin-bottom:4px">Lote: ${lote.codigo_lote}</div>
       <svg id="etq-barcode"></svg>
-      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtQtd(lote.quantidade_atual)} ${lote.unidade}</div>
+      <div style="font-size:10px;color:#555;margin-top:4px">Validade: ${fmtData(lote.data_validade)} · Qtd: ${fmtQtd(lote.quantidade_atual, lote.unidade)} ${lote.unidade}</div>
     </div>`;
   JsBarcode('#etq-barcode', lote.codigo_lote, { format:'CODE128', width:2, height:42, fontSize:12 });
   window.print();
@@ -2447,6 +2462,11 @@ async function criarFornecedor(){
 }
 
 // ═══════════════════════ MOVIMENTAÇÕES ═══════════════════════
+let movTimer = null, movSeq = 0;
+function agendarMovimentacoes(){
+  clearTimeout(movTimer);
+  movTimer = setTimeout(carregarMovimentacoes, 300);
+}
 async function carregarMovimentacoes(){
   const catSel = document.getElementById('mov-filtro-categoria');
   if(catSel.options.length <= 1){
@@ -2464,18 +2484,21 @@ async function carregarMovimentacoes(){
   if(dataDe) params.set('data_de', dataDe);
   if(dataAte) params.set('data_ate', dataAte);
 
+  const minhaSeq = ++movSeq;
   const movs = await api('/api/movimentacoes' + (params.toString() ? '?'+params.toString() : ''));
+  if(minhaSeq !== movSeq) return; // chegou uma resposta mais nova, descarta esta
+  document.getElementById('mov-total').textContent = movs.length >= 1000 ? '1.000 (limite — refine pelos filtros)' : movs.length.toLocaleString('pt-BR');
   document.getElementById('mov-tbody').innerHTML = movs.map(m => `
     <tr>
       <td>${fmtData(m.data)}</td>
       <td><span class="badge ${m.tipo==='entrada'?'badge-ok':(m.tipo==='saida'?'badge-info':'badge-warn')}">${m.tipo}</span></td>
       <td>${m.produto_codigo||'—'}</td>
-      <td>${m.produto||'—'}</td>
+      <td class="c-trunc" title="${escAttr(m.produto)}">${m.produto||'—'}</td>
       <td>${catBadge(m.categoria)}</td>
       <td>${m.codigo_lote?`<span class="lote-tag">${m.codigo_lote}</span>`:'—'}</td>
-      <td>${fmtQtd(m.quantidade)} ${m.unidade||''}</td>
+      <td>${fmtQtd(m.quantidade, m.unidade)} ${m.unidade||''}</td>
       <td>${m.valor_total?fmtMoeda(m.valor_total):'—'}</td>
-      <td>${m.destino||m.obs||'—'}</td>
+      <td class="c-trunc" title="${escAttr(m.destino||m.obs)}">${m.destino||m.obs||'—'}</td>
     </tr>`).join('') || '<tr><td colspan="9" style="color:#aaa;text-align:center;padding:24px">Nenhuma movimentação encontrada</td></tr>';
 }
 function limparFiltrosMovimentacoes(){
@@ -2495,9 +2518,9 @@ async function carregarAjustes(){
       <td>${fmtData(a.data)}</td>
       <td>${a.codigo_lote?`<span class="lote-tag">${a.codigo_lote}</span>`:'—'}</td>
       <td>${a.produto||'—'}</td>
-      <td>${fmtQtd(a.antes)}</td>
-      <td>${fmtQtd(a.depois)}</td>
-      <td class="${a.diff>0?'':(a.diff<0?'':'')}" style="color:${a.diff>0?'#1e7e34':(a.diff<0?'#c0392b':'#888')};font-weight:600">${a.diff>0?'+':''}${fmtQtd(a.diff)}</td>
+      <td>${fmtQtd(a.antes, a.unidade)}</td>
+      <td>${fmtQtd(a.depois, a.unidade)}</td>
+      <td class="${a.diff>0?'':(a.diff<0?'':'')}" style="color:${a.diff>0?'#1e7e34':(a.diff<0?'#c0392b':'#888')};font-weight:600">${a.diff>0?'+':''}${fmtQtd(a.diff, a.unidade)}</td>
       <td>${a.motivo||'—'}</td>
     </tr>`).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum ajuste registrado</td></tr>';
 }
@@ -2519,15 +2542,15 @@ function renderInventario(){
   );
   document.getElementById('inv-tbody').innerHTML = filtrado.map(l => {
     const vol = (l.fator_conversao && parseFloat(l.fator_conversao) > 0)
-      ? fmtQtd(parseFloat(l.quantidade_atual) / parseFloat(l.fator_conversao)) + ' ' + (l.unidade_compra || '')
+      ? fmtQtd(parseFloat(l.quantidade_atual) / parseFloat(l.fator_conversao), l.unidade_compra) + ' ' + (l.unidade_compra || '')
       : '—';
-    return `<tr data-lote-id="${l.id}" data-qtd-sistema="${l.quantidade_atual}">
+    return `<tr data-lote-id="${l.id}" data-qtd-sistema="${l.quantidade_atual}" data-unidade="${l.unidade}">
       <td><span class="lote-tag">${l.codigo_lote}</span></td>
       <td>${l.produto_descricao}</td>
       <td>${catBadge(l.categoria)}</td>
-      <td>${fmtQtd(l.quantidade_atual)} ${l.unidade}</td>
+      <td>${fmtQtd(l.quantidade_atual, l.unidade)} ${l.unidade}</td>
       <td>${vol}</td>
-      <td><input type="number" step="0.0001" class="ajuste-input inv-contado" placeholder="${fmtQtd(l.quantidade_atual)}" oninput="atualizarDiffInventario(this)"></td>
+      <td><input type="number" step="0.0001" class="ajuste-input inv-contado" placeholder="${fmtQtd(l.quantidade_atual, l.unidade)}" oninput="atualizarDiffInventario(this)"></td>
       <td class="inv-diff diff-zero">—</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum lote em estoque</td></tr>';
@@ -2539,7 +2562,7 @@ function atualizarDiffInventario(input){
   if(input.value === ''){ cell.textContent = '—'; cell.className = 'inv-diff diff-zero'; return; }
   const contado = parseFloat(input.value);
   const diff = contado - qtdSistema;
-  cell.textContent = (diff>0?'+':'') + fmtQtd(diff);
+  cell.textContent = (diff>0?'+':'') + fmtQtd(diff, tr.dataset.unidade);
   cell.className = 'inv-diff ' + (diff>0?'diff-pos':(diff<0?'diff-neg':'diff-zero'));
 }
 async function salvarInventario(){
@@ -3132,7 +3155,7 @@ function calcularResumoReceberItem(itemId){
   card.querySelector('.receber-preco-label').textContent = `Valor unitário (R$)`;
   const qtdTotal = qtdVol * fator;
   const valorTotal = qtdVol * precoVol;
-  card.querySelector('.receber-outqtd-campo').value = qtdTotal ? fmtQtd(qtdTotal) : '';
+  card.querySelector('.receber-outqtd-campo').value = qtdTotal ? fmtQtd(qtdTotal, unidadeBase) : '';
   card.querySelector('.receber-outtotal-campo').value = valorTotal ? fmtMoeda(valorTotal) : '';
 }
 function fecharRecebimento(){

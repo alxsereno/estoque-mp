@@ -578,7 +578,9 @@ app.post('/api/movimentacoes', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 app.get('/api/ajustes', async (req, res) => {
   try {
-    const { rows } = await pool.query(`SELECT * FROM ajustes ORDER BY id DESC LIMIT 1000`);
+    const { rows } = await pool.query(
+      `SELECT a.*, l.unidade FROM ajustes a LEFT JOIN lotes l ON l.id = a.lote_id ORDER BY a.id DESC LIMIT 1000`
+    );
     res.json(rows);
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
