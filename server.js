@@ -145,12 +145,20 @@ app.get('/api/produtos', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+// Localização do produto precisa existir na lista de Configurações (padronização).
+async function localizacaoValida(nome){
+  if(!nome) return true;
+  const r = await pool.query(`SELECT 1 FROM localizacoes WHERE nome=$1`, [nome]);
+  return r.rows.length > 0;
+}
+
 app.post('/api/produtos', async (req, res) => {
   const { codigo, descricao, categoria_id, unidade, estoque_minimo, estoque_maximo, localizacao_estoque } = req.body;
   if(!codigo || !descricao){
     return res.status(400).json({ error: 'Código e descrição são obrigatórios' });
   }
   try {
+    if(!(await localizacaoValida(localizacao_estoque))) return res.status(400).json({ error: 'Localização não cadastrada — cadastre em Configurações' });
     const { rows } = await pool.query(
       `INSERT INTO produtos (codigo, descricao, categoria_id, unidade, estoque_minimo, estoque_maximo, localizacao_estoque, origem)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'manual') RETURNING *`,
@@ -166,6 +174,7 @@ app.post('/api/produtos', async (req, res) => {
 app.put('/api/produtos/:id', async (req, res) => {
   const { descricao, categoria_id, unidade, estoque_minimo, estoque_maximo, localizacao_estoque } = req.body;
   try {
+    if(!(await localizacaoValida(localizacao_estoque))) return res.status(400).json({ error: 'Localização não cadastrada — cadastre em Configurações' });
     const { rows } = await pool.query(
       `UPDATE produtos SET descricao=$1, categoria_id=$2, unidade=$3, estoque_minimo=$4, estoque_maximo=$5, localizacao_estoque=$6
        WHERE id=$7 RETURNING *`,
@@ -395,7 +404,7 @@ app.get('/api/lotes', async (req, res) => {
   const { produto_id, status, disponivel } = req.query;
   try {
     let q = `SELECT l.*, p.codigo AS produto_codigo, p.descricao AS produto_descricao,
-                    c.nome AS categoria, f.nome AS fornecedor_nome
+                    p.localizacao_estoque, c.nome AS categoria, f.nome AS fornecedor_nome
              FROM lotes l
              JOIN produtos p ON p.id = l.produto_id
              LEFT JOIN categorias c ON c.id = p.categoria_id
@@ -785,6 +794,64 @@ app.post('/api/destinos', requireGestor, async (req, res) => {
 app.delete('/api/destinos/:id', requireGestor, async (req, res) => {
   try {
     await pool.query(`DELETE FROM destinos WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// LOCALIZAÇÕES DE ESTOQUE (lista padronizada usada no cadastro de produtos)
+// ═══════════════════════════════════════════════════════════
+app.get('/api/localizacoes', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT l.*, (SELECT COUNT(*) FROM produtos p WHERE p.localizacao_estoque = l.nome AND p.ativo = TRUE)::int AS total_produtos
+       FROM localizacoes l ORDER BY l.nome`
+    );
+    res.json(rows);
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/localizacoes', requireGestor, async (req, res) => {
+  const nome = (req.body.nome || '').trim();
+  if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
+  try {
+    const { rows } = await pool.query(`INSERT INTO localizacoes (nome) VALUES ($1) RETURNING *`, [nome]);
+    res.json({ ok: true, localizacao: rows[0] });
+  } catch(e){
+    if(e.code === '23505') return res.status(400).json({ error: 'Essa localização já existe' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Renomear: os produtos que usam o nome antigo acompanham o novo (mesma transação).
+app.put('/api/localizacoes/:id', requireGestor, async (req, res) => {
+  const nome = (req.body.nome || '').trim();
+  if(!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const atual = await client.query(`SELECT nome FROM localizacoes WHERE id=$1 FOR UPDATE`, [req.params.id]);
+    if(atual.rows.length === 0) throw new Error('Localização não encontrada');
+    await client.query(`UPDATE localizacoes SET nome=$1 WHERE id=$2`, [nome, req.params.id]);
+    await client.query(`UPDATE produtos SET localizacao_estoque=$1 WHERE localizacao_estoque=$2`, [nome, atual.rows[0].nome]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch(e){
+    await client.query('ROLLBACK');
+    if(e.code === '23505') return res.status(400).json({ error: 'Essa localização já existe' });
+    res.status(400).json({ error: e.message });
+  } finally { client.release(); }
+});
+
+app.delete('/api/localizacoes/:id', requireGestor, async (req, res) => {
+  try {
+    const l = await pool.query(`SELECT nome FROM localizacoes WHERE id=$1`, [req.params.id]);
+    if(l.rows.length === 0) return res.json({ ok: true });
+    const uso = await pool.query(`SELECT COUNT(*)::int AS n FROM produtos WHERE localizacao_estoque=$1 AND ativo=TRUE`, [l.rows[0].nome]);
+    if(uso.rows[0].n > 0){
+      return res.status(400).json({ error: `Há ${uso.rows[0].n} produto(s) nessa localização — mude a localização deles antes de excluir` });
+    }
+    await pool.query(`DELETE FROM localizacoes WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
