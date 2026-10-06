@@ -191,6 +191,25 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Localizações de estoque (ex: "Câmara fria 2 - prateleira B"). Os produtos guardam o
+-- nome em produtos.localizacao_estoque; a lista abaixo padroniza o que pode ser escolhido.
+CREATE TABLE IF NOT EXISTS localizacoes (id SERIAL PRIMARY KEY);
+ALTER TABLE localizacoes ADD COLUMN IF NOT EXISTS nome VARCHAR(100);
+ALTER TABLE localizacoes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'localizacoes_nome_key') THEN
+    ALTER TABLE localizacoes ADD CONSTRAINT localizacoes_nome_key UNIQUE (nome);
+  END IF;
+END $$;
+-- Limpa espaços sobrando / textos vazios já digitados nos produtos (pra casarem com a lista)
+UPDATE produtos SET localizacao_estoque = NULLIF(TRIM(localizacao_estoque), '')
+  WHERE localizacao_estoque IS NOT NULL AND localizacao_estoque IS DISTINCT FROM NULLIF(TRIM(localizacao_estoque), '');
+-- Aproveita o que já foi digitado nos produtos (não perde nenhuma localização existente)
+INSERT INTO localizacoes (nome)
+  SELECT DISTINCT TRIM(localizacao_estoque) FROM produtos
+  WHERE localizacao_estoque IS NOT NULL AND TRIM(localizacao_estoque) <> ''
+ON CONFLICT (nome) DO NOTHING;
+
 -- ═══════════════════════════════════════════════════════════
 -- CORREÇÃO DE TIPOS HERDADOS DA v1: nas tabelas lotes/movimentacoes,
 -- algumas colunas já existiam (criadas pela v1) com tipo TEXTO em vez
