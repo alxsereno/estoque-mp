@@ -70,7 +70,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;font-size:11px;font-weight:600;color:#888;padding:0 12px 10px;border-bottom:1px solid #e5e5e0;text-transform:uppercase;letter-spacing:.04em}
 .th-sort{cursor:pointer;user-select:none}
 .th-sort:hover{color:#1a1a18}
-#s-estoque.active,#s-movimentacoes.active,#s-pedidos.active{display:flex;flex-direction:column;height:100%}
+#s-estoque.active,#s-movimentacoes.active,#s-pedidos.active,#s-inventario.active,#s-ajustes.active{display:flex;flex-direction:column;height:100%}
 .content.content-compacto{padding:14px 20px}
 .est-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;flex:none}
 .est-titulo{font-size:18px;font-weight:600;margin:0}
@@ -702,29 +702,55 @@ tr:hover td{background:#fafaf7}
 
   <!-- INVENTÁRIO -->
   <section class="screen" id="s-inventario">
-    <h1>Inventário (Contagem)</h1>
-    <p class="sub">Confira a quantidade física de cada lote e registre os ajustes necessários de uma vez</p>
-    <div class="filter-row">
-      <input type="text" id="inv-busca" placeholder="Buscar produto..." oninput="renderInventario()">
-      <select id="inv-categoria" onchange="renderInventario()"><option value="">Todas categorias</option></select>
-    </div>
-    <div class="card">
-      <table>
-        <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. sistema</th><th>Volumes</th><th>Qtd. contada</th><th>Diferença</th></tr></thead>
-        <tbody id="inv-tbody"></tbody>
-      </table>
-      <div class="btn-row">
-        <button class="btn" onclick="carregarInventario()">Recarregar lista</button>
-        <button class="btn btn-dark" onclick="salvarInventario()">Registrar ajustes das diferenças</button>
+    <div class="est-topo">
+      <h1 class="est-titulo">Inventário (Contagem)</h1>
+      <div class="est-chips">
+        <span class="est-chip">Lotes <b id="inv-total">—</b></span>
+        <span class="est-chip">Contados <b id="inv-contados">0</b></span>
+        <span class="est-chip est-chip-filtrado">Com diferença <b id="inv-difs">0</b></span>
       </div>
     </div>
+    <div class="est-toolbar">
+      <input type="text" id="inv-busca" placeholder="Buscar produto ou lote" oninput="renderInventario()">
+      <select id="inv-categoria" onchange="renderInventario()"><option value="">Todas categorias</option></select>
+      <select id="inv-filtro-contagem" onchange="renderInventario()">
+        <option value="">Todos os lotes</option>
+        <option value="pendentes">Não contados</option>
+        <option value="contados">Contados</option>
+        <option value="diferenca">Com diferença</option>
+      </select>
+      <span class="est-toolbar-espaco"></span>
+      <button class="btn-icone" title="Limpar filtros" aria-label="Limpar filtros" onclick="limparFiltrosInventario()"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button class="btn btn-sm" onclick="carregarInventario()">Recarregar lista</button>
+      <button class="btn btn-sm btn-dark" onclick="salvarInventario()">Registrar ajustes das diferenças</button>
+    </div>
+    <div class="est-tabela"><table class="tbl-estoque">
+      <thead><tr><th>Lote</th><th>Produto</th><th>Categoria</th><th>Qtd. sistema</th><th>Volumes</th><th>Qtd. contada</th><th>Diferença</th></tr></thead>
+      <tbody id="inv-tbody"></tbody>
+    </table></div>
   </section>
 
   <!-- AJUSTES -->
   <section class="screen" id="s-ajustes">
-    <h1>Ajustes de Estoque</h1>
-    <p class="sub">Correções manuais de saldo (perdas, contagem física, etc.)</p>
-    <div class="card"><table>
+    <div class="est-topo">
+      <h1 class="est-titulo">Ajustes de Estoque</h1>
+      <div class="est-chips"><span class="est-chip">Registros <b id="aj-total">—</b></span></div>
+    </div>
+    <div class="est-toolbar">
+      <input type="text" id="aj-filtro-busca" placeholder="Produto, lote ou motivo" oninput="renderAjustes()">
+      <select id="aj-filtro-tipo" onchange="renderAjustes()">
+        <option value="">Todos os ajustes</option>
+        <option value="pos">Aumentos (+)</option>
+        <option value="neg">Reduções (−)</option>
+      </select>
+      <span class="est-rotulo">De</span>
+      <input type="date" id="aj-filtro-data-de" onchange="renderAjustes()">
+      <span class="est-rotulo">Até</span>
+      <input type="date" id="aj-filtro-data-ate" onchange="renderAjustes()">
+      <span class="est-toolbar-espaco"></span>
+      <button class="btn-icone" title="Limpar filtros" aria-label="Limpar filtros" onclick="limparFiltrosAjustes()"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="est-tabela"><table class="tbl-estoque">
       <thead><tr><th>Data</th><th>Lote</th><th>Produto</th><th>Antes</th><th>Depois</th><th>Diferença</th><th>Motivo</th></tr></thead>
       <tbody id="aj-tbody"></tbody>
     </table></div>
@@ -979,7 +1005,7 @@ function showScreen(id){
   document.getElementById('s-'+id).classList.add('active');
   document.querySelector(`.nav-item[data-screen="${id}"]`).classList.add('active');
   const areaConteudo = document.querySelector('.content');
-  areaConteudo.classList.toggle('content-compacto', id === 'estoque' || id === 'movimentacoes' || id === 'pedidos');
+  areaConteudo.classList.toggle('content-compacto', id === 'estoque' || id === 'movimentacoes' || id === 'pedidos' || id === 'inventario' || id === 'ajustes');
   areaConteudo.scrollTop = 0;
   const fn = CARREGADORES[id];
   if(fn){
@@ -2603,54 +2629,109 @@ function limparFiltrosMovimentacoes(){
 }
 
 // ═══════════════════════ AJUSTES ═══════════════════════
+let ajustesCache = [];
 async function carregarAjustes(){
-  const ajustes = await api('/api/ajustes');
-  document.getElementById('aj-tbody').innerHTML = ajustes.map(a => `
+  ajustesCache = await api('/api/ajustes');
+  renderAjustes();
+}
+function limparFiltrosAjustes(){
+  ['aj-filtro-busca','aj-filtro-tipo','aj-filtro-data-de','aj-filtro-data-ate'].forEach(i => document.getElementById(i).value = '');
+  renderAjustes();
+}
+function renderAjustes(){
+  const busca = document.getElementById('aj-filtro-busca').value.trim().toLowerCase();
+  const tipo = document.getElementById('aj-filtro-tipo').value;
+  const de = document.getElementById('aj-filtro-data-de').value;
+  const ate = document.getElementById('aj-filtro-data-ate').value;
+  const lista = ajustesCache.filter(a => {
+    if(busca && !((a.produto||'')+' '+(a.codigo_lote||'')+' '+(a.motivo||'')).toLowerCase().includes(busca)) return false;
+    if(tipo === 'pos' && !(a.diff > 0)) return false;
+    if(tipo === 'neg' && !(a.diff < 0)) return false;
+    if(de || ate){
+      const d = a.data ? String(a.data).slice(0,10) : '';
+      if(!d || (de && d < de) || (ate && d > ate)) return false;
+    }
+    return true;
+  });
+  document.getElementById('aj-total').textContent = lista.length;
+  document.getElementById('aj-tbody').innerHTML = lista.map(a => `
     <tr>
       <td>${fmtData(a.data)}</td>
-      <td>${a.codigo_lote?`<span class="lote-tag">${a.codigo_lote}</span>`:'—'}</td>
-      <td>${a.produto||'—'}</td>
+      <td>${a.codigo_lote?`<span class="lote-tag">${escAttr(a.codigo_lote)}</span>`:'—'}</td>
+      <td class="c-trunc" title="${escAttr(a.produto||'')}">${escAttr(a.produto||'—')}</td>
       <td>${fmtQtd(a.antes, a.unidade)}</td>
       <td>${fmtQtd(a.depois, a.unidade)}</td>
-      <td class="${a.diff>0?'':(a.diff<0?'':'')}" style="color:${a.diff>0?'#1e7e34':(a.diff<0?'#c0392b':'#888')};font-weight:600">${a.diff>0?'+':''}${fmtQtd(a.diff, a.unidade)}</td>
-      <td>${a.motivo||'—'}</td>
-    </tr>`).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum ajuste registrado</td></tr>';
+      <td style="color:${a.diff>0?'#1e7e34':(a.diff<0?'#c0392b':'#888')};font-weight:600">${a.diff>0?'+':''}${fmtQtd(a.diff, a.unidade)}</td>
+      <td class="c-trunc" title="${escAttr(a.motivo||'')}">${escAttr(a.motivo||'—')}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum ajuste encontrado</td></tr>';
 }
 
 // ═══════════════════════ INVENTÁRIO (CONTAGEM) ═══════════════════════
 let inventarioLotes = [];
+let invContagens = {}; // loteId -> texto digitado (mantém a contagem ao filtrar)
 async function carregarInventario(){
   inventarioLotes = await api('/api/lotes?disponivel=1');
+  invContagens = {};
   const cats = [...new Set(inventarioLotes.map(l=>l.categoria).filter(Boolean))];
-  document.getElementById('inv-categoria').innerHTML = '<option value="">Todas categorias</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  const atual = document.getElementById('inv-categoria').value;
+  document.getElementById('inv-categoria').innerHTML = '<option value="">Todas categorias</option>' + cats.map(c=>`<option value="${escAttr(c)}">${escAttr(c)}</option>`).join('');
+  document.getElementById('inv-categoria').value = cats.includes(atual) ? atual : '';
   renderInventario();
+}
+function limparFiltrosInventario(){
+  document.getElementById('inv-busca').value = '';
+  document.getElementById('inv-categoria').value = '';
+  document.getElementById('inv-filtro-contagem').value = '';
+  renderInventario();
+}
+function invDiferenca(l){
+  const v = invContagens[l.id];
+  if(v === undefined || v === '' || isNaN(parseFloat(v))) return null;
+  return parseFloat(v) - parseFloat(l.quantidade_atual);
 }
 function renderInventario(){
   const busca = (document.getElementById('inv-busca').value||'').toLowerCase();
   const cat = document.getElementById('inv-categoria').value;
-  const filtrado = inventarioLotes.filter(l =>
-    (!busca || l.produto_descricao.toLowerCase().includes(busca)) &&
-    (!cat || l.categoria === cat)
-  );
+  const modo = document.getElementById('inv-filtro-contagem').value;
+  const filtrado = inventarioLotes.filter(l => {
+    if(busca && !((l.produto_descricao||'')+' '+(l.codigo_lote||'')).toLowerCase().includes(busca)) return false;
+    if(cat && l.categoria !== cat) return false;
+    const d = invDiferenca(l);
+    if(modo === 'pendentes' && d !== null) return false;
+    if(modo === 'contados' && d === null) return false;
+    if(modo === 'diferenca' && !(d !== null && d !== 0)) return false;
+    return true;
+  });
   document.getElementById('inv-tbody').innerHTML = filtrado.map(l => {
     const vol = (l.fator_conversao && parseFloat(l.fator_conversao) > 0)
       ? fmtQtd(parseFloat(l.quantidade_atual) / parseFloat(l.fator_conversao), l.unidade_compra) + ' ' + (l.unidade_compra || '')
       : '—';
-    return `<tr data-lote-id="${l.id}" data-qtd-sistema="${l.quantidade_atual}" data-unidade="${l.unidade}">
-      <td><span class="lote-tag">${l.codigo_lote}</span></td>
-      <td>${l.produto_descricao}</td>
+    const val = invContagens[l.id] === undefined ? '' : invContagens[l.id];
+    return `<tr data-lote-id="${l.id}" data-qtd-sistema="${l.quantidade_atual}" data-unidade="${escAttr(l.unidade)}">
+      <td><span class="lote-tag">${escAttr(l.codigo_lote)}</span></td>
+      <td class="c-trunc" title="${escAttr(l.produto_descricao)}">${escAttr(l.produto_descricao)}</td>
       <td>${catBadge(l.categoria)}</td>
       <td>${fmtQtd(l.quantidade_atual, l.unidade)} ${l.unidade}</td>
       <td>${vol}</td>
-      <td><input type="number" step="0.0001" class="ajuste-input inv-contado" placeholder="${fmtQtd(l.quantidade_atual, l.unidade)}" oninput="atualizarDiffInventario(this)"></td>
+      <td><input type="number" step="0.0001" class="ajuste-input inv-contado" value="${escAttr(val)}" placeholder="${fmtQtd(l.quantidade_atual, l.unidade)}" oninput="atualizarDiffInventario(this)"></td>
       <td class="inv-diff diff-zero">—</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum lote em estoque</td></tr>';
+  }).join('') || '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:24px">Nenhum lote encontrado</td></tr>';
+  document.querySelectorAll('#inv-tbody tr[data-lote-id]').forEach(tr => atualizarDiffInventario(tr.querySelector('.inv-contado'), true));
+  atualizarChipsInventario();
 }
-function atualizarDiffInventario(input){
+function atualizarChipsInventario(){
+  document.getElementById('inv-total').textContent = inventarioLotes.length;
+  let c = 0, d = 0;
+  inventarioLotes.forEach(l => { const x = invDiferenca(l); if(x !== null){ c++; if(x !== 0) d++; } });
+  document.getElementById('inv-contados').textContent = c;
+  document.getElementById('inv-difs').textContent = d;
+}
+function atualizarDiffInventario(input, semSalvar){
   const tr = input.closest('tr');
   const qtdSistema = parseFloat(tr.dataset.qtdSistema);
   const cell = tr.querySelector('.inv-diff');
+  if(!semSalvar){ invContagens[tr.dataset.loteId] = input.value; atualizarChipsInventario(); }
   if(input.value === ''){ cell.textContent = '—'; cell.className = 'inv-diff diff-zero'; return; }
   const contado = parseFloat(input.value);
   const diff = contado - qtdSistema;
@@ -2658,21 +2739,17 @@ function atualizarDiffInventario(input){
   cell.className = 'inv-diff ' + (diff>0?'diff-pos':(diff<0?'diff-neg':'diff-zero'));
 }
 async function salvarInventario(){
-  const linhas = [...document.querySelectorAll('#inv-tbody tr[data-lote-id]')];
-  const comDiferenca = linhas.filter(tr => {
-    const input = tr.querySelector('.inv-contado');
-    return input.value !== '' && parseFloat(input.value) !== parseFloat(tr.dataset.qtdSistema);
-  });
+  // considera todos os lotes contados, mesmo os escondidos pelos filtros
+  const comDiferenca = inventarioLotes.filter(l => { const d = invDiferenca(l); return d !== null && d !== 0; });
   if(comDiferenca.length === 0){ toast('Nenhuma diferença para registrar'); return; }
   if(!confirm(`Registrar ${comDiferenca.length} ajuste(s) de estoque com base na contagem?`)) return;
 
   let ok = 0, erro = 0;
-  for(const tr of comDiferenca){
-    const loteId = tr.dataset.loteId;
-    const antes = parseFloat(tr.dataset.qtdSistema);
-    const depois = parseFloat(tr.querySelector('.inv-contado').value);
+  for(const l of comDiferenca){
+    const antes = parseFloat(l.quantidade_atual);
+    const depois = parseFloat(invContagens[l.id]);
     try{
-      await api('/api/ajustes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ lote_id: loteId, antes, depois, motivo: 'Contagem de inventário' }) });
+      await api('/api/ajustes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ lote_id: l.id, antes, depois, motivo: 'Contagem de inventário' }) });
       ok++;
     }catch(e){ erro++; }
   }
