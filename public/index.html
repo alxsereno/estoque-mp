@@ -1759,6 +1759,16 @@ async function buscarCodigoSaida(codigo){
   }catch(e){ resDiv.innerHTML = `<p style="color:#c0392b">Erro: ${e.message}</p>`; }
 }
 
+// Saldo em volumes (unidade de compra) derivado do saldo atual do lote
+function volumesTxt(l, qtd){
+  const f = parseFloat(l.fator_conversao);
+  if(!l.unidade_compra || !(f > 0) || l.unidade_compra === l.unidade) return '';
+  return fmtQtd(parseFloat(qtd) / f, l.unidade_compra) + ' ' + l.unidade_compra;
+}
+function saldoComVolumes(l, qtd){
+  const v = volumesTxt(l, qtd);
+  return fmtQtd(qtd, l.unidade) + ' ' + l.unidade + (v ? ' (' + v + ')' : '');
+}
 function mostrarLotesSaida(lotes){
   const card = document.getElementById('sai-lotes-card');
   card.style.display = 'block';
@@ -1772,6 +1782,7 @@ function mostrarLotesSaida(lotes){
       </div>
       <div style="text-align:right">
         <div style="font-weight:600">${fmtQtd(l.quantidade_atual, l.unidade)} ${l.unidade}</div>
+        ${volumesTxt(l, l.quantidade_atual) ? `<div style="color:#888;font-size:12px">${volumesTxt(l, l.quantidade_atual)}</div>` : ''}
       </div>
     </div>`).join('');
 }
@@ -1784,7 +1795,7 @@ function selecionarLoteSaidaJSON(el){
 function selecionarLoteSaida(lote){
   saidaAtual = { lote };
   document.getElementById('sai-form-card').style.display = 'block';
-  document.getElementById('sai-qtd-disponivel').value = fmtQtd(lote.quantidade_atual, lote.unidade) + ' ' + lote.unidade;
+  document.getElementById('sai-qtd-disponivel').value = saldoComVolumes(lote, lote.quantidade_atual);
   document.getElementById('sai-qtd').value = '';
   document.getElementById('sai-qtd').max = lote.quantidade_atual;
 }
@@ -1804,11 +1815,12 @@ async function confirmarSaida(){
   const destino = document.getElementById('sai-destino').value;
   if(!qtd || qtd <= 0){ toast('Informe a quantidade'); return; }
   try{
-    await api('/api/movimentacoes', {
+    const r = await api('/api/movimentacoes', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ tipo:'saida', lote_id: saidaAtual.lote.id, quantidade: qtd, destino })
     });
-    toast('✓ Saída registrada');
+    const novo = r && r.quantidade_atual != null ? ' · novo saldo: ' + saldoComVolumes(saidaAtual.lote, r.quantidade_atual) : '';
+    toast('✓ Saída registrada' + novo);
     cancelarSaida();
   }catch(e){ toast('Erro: '+e.message); }
 }
@@ -1940,14 +1952,18 @@ function estoqueAgrupadoPorProduto(filtrado){
     // (não a quantidade comprada originalmente) — assim acompanha as saídas.
     if(l.fator_conversao && parseFloat(l.fator_conversao) > 0 && l.unidade_compra && parseFloat(l.quantidade_atual) > 0){
       const volRestante = parseFloat(l.quantidade_atual) / parseFloat(l.fator_conversao);
-      grupos[key].volumes[l.unidade_compra] = (grupos[key].volumes[l.unidade_compra]||0) + volRestante;
+      // Agrupa por embalagem (unidade + tamanho): "pct de 1 kg" e "pct de 5 kg" não se misturam
+      const f = parseFloat(l.fator_conversao);
+      const kv = l.unidade_compra + '|' + f + '|' + l.unidade;
+      if(!grupos[key].volumes[kv]) grupos[key].volumes[kv] = { un: l.unidade_compra, f, base: l.unidade, qtd: 0 };
+      grupos[key].volumes[kv].qtd += volRestante;
     }
   });
   return Object.values(grupos).map(g => {
     const p = produtos.find(x => x.id === g.produto_id);
     return {
       ...g,
-      volumesTxt: Object.entries(g.volumes).map(([un,qtd]) => `${fmtQtd(qtd, un)} ${un}`).join(', ') || '—',
+      volumesTxt: Object.values(g.volumes).map(v => `${fmtQtd(v.qtd, v.un)} ${v.un}` + (v.f !== 1 && v.un !== v.base ? ` de ${fmtNum(v.f)} ${v.base}` : '')).join(' + ') || '—',
       valorUnitario: g.qtd > 0 ? (g.valor / g.qtd) : 0,
       statusEstoque: statusEstoque(g.produto_id, g.qtd),
       estoqueMin: p && p.estoque_minimo != null ? fmtQtd(p.estoque_minimo, p.unidade) : '—',
