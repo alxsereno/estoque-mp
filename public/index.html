@@ -161,6 +161,22 @@ tr:hover td{background:#fafaf7}
   @page etiqueta{size:100mm 60mm;margin:0}
 }
 #print-area{display:none}
+@page lista-a5{size:A5 portrait;margin:8mm}
+.lista-a5{page:lista-a5;font-family:Arial,Helvetica,sans-serif;color:#000;width:100%}
+.lista-a5 .la-cab{display:flex;align-items:center;gap:10px;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:6px}
+.lista-a5 .la-cab img{height:34px;width:auto}
+.lista-a5 .la-tit{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.lista-a5 .la-loc{font-size:19px;font-weight:800;line-height:1.1}
+.lista-a5 .la-meta{display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px}
+.lista-a5 table{width:100%;border-collapse:collapse;font-size:12.5px}
+.lista-a5 th{text-align:left;font-size:10.5px;text-transform:uppercase;border:1px solid #000;background:#eee;padding:4px 5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.lista-a5 td{border:1px solid #000;padding:5px;vertical-align:middle}
+.lista-a5 tr{page-break-inside:avoid}
+.lista-a5 .la-cod{font-size:11px;white-space:nowrap}
+.lista-a5 .la-desc{font-weight:700}
+.lista-a5 .la-qtd{font-weight:700;white-space:nowrap}
+.lista-a5 .la-sub{font-size:10px;font-weight:400}
+.lista-a5 .la-rodape{margin-top:6px;font-size:9.5px;color:#444}
 .etiqueta-100x60{width:100mm;height:60mm;padding:4mm;box-sizing:border-box;font-family:sans-serif;overflow:hidden;display:flex;flex-direction:column;justify-content:center;page:etiqueta}
 .modal-overlay{position:fixed;inset:0;background:rgba(20,20,18,.45);display:flex;align-items:center;justify-content:center;z-index:2000}
 .modal-box{background:#fff;border-radius:12px;padding:24px;width:520px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
@@ -480,6 +496,9 @@ tr:hover td{background:#fafaf7}
       <span class="est-toolbar-espaco"></span>
       <button class="btn-icone" title="Exportar Excel" aria-label="Exportar Excel" onclick="exportarEstoqueExcel()">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M4 15h16M10 3v18"/></svg>
+      </button>
+      <button class="btn-icone" title="Lista da localização (A5)" aria-label="Lista da localização (A5)" onclick="abrirListaLocalizacao()">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
       </button>
       <button class="btn-icone" title="Gerar PDF" aria-label="Gerar PDF" onclick="exportarEstoquePDF()">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="2"/><path d="M7 14h10v7H7z"/></svg>
@@ -2074,6 +2093,65 @@ function exportarEstoqueExcel(){
   XLSX.writeFile(wb, `estoque-${estoqueVisao}-${dataHoje}.xlsx`);
 }
 
+// ── Lista A5 por localização (display na porta do freezer/câmara) ──
+function lotesDaLocalizacao(loc){
+  return lotesCache.filter(l => loc === '__sem__' ? !l.localizacao_estoque : l.localizacao_estoque === loc);
+}
+function abrirListaLocalizacao(){
+  const nomes = [...new Set([...localizacoes.map(l=>l.nome), ...lotesCache.map(l=>l.localizacao_estoque).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const atual = document.getElementById('est-localizacao').value;
+  const opts = nomes.map(n => `<option value="${escAttr(n)}" ${n===atual?'selected':''}>${escAttr(n)}</option>`).join('')
+    + `<option value="__sem__" ${atual==='__sem__'?'selected':''}>Sem localização</option>`;
+  abrirModal('Lista da localização (A5)', `
+    <p style="font-size:12px;color:#666;margin-bottom:14px">Folha A5 com tudo o que está em estoque na localização escolhida: código, descrição, quantidade, volumes e validade. Ignora os outros filtros da tela.</p>
+    <div class="field"><label>Localização</label><select id="la-loc" onchange="atualizarResumoListaLoc()">${opts}</select></div>
+    <div class="field"><label>Responsável</label><input type="text" id="la-resp" value="${escAttr(sessaoUsuario ? sessaoUsuario.nome : '')}"></div>
+    <p id="la-resumo" style="font-size:12px;color:#888;margin-bottom:12px"></p>
+    <div class="btn-row"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-dark" onclick="imprimirListaLocalizacao()">Imprimir A5</button></div>`);
+  atualizarResumoListaLoc();
+}
+function atualizarResumoListaLoc(){
+  const loc = document.getElementById('la-loc').value;
+  const n = new Set(lotesDaLocalizacao(loc).map(l => l.produto_id)).size;
+  document.getElementById('la-resumo').textContent = n ? `${n} produto(s) nesta localização` : 'Nenhum produto em estoque nesta localização';
+}
+function imprimirListaLocalizacao(){
+  const loc = document.getElementById('la-loc').value;
+  const resp = document.getElementById('la-resp').value.trim();
+  const lotes = lotesDaLocalizacao(loc);
+  if(!lotes.length){ toast('Nenhum produto em estoque nesta localização'); return; }
+  const grupos = estoqueAgrupadoPorProduto(lotes).sort((a,b) => a.produto_descricao.localeCompare(b.produto_descricao,'pt-BR'));
+  // validade mostrada = a mais próxima de vencer entre os lotes do produto (FIFO)
+  const linhas = grupos.map(g => {
+    const doProduto = lotes.filter(l => l.produto_id === g.produto_id);
+    const datas = doProduto.map(l => l.data_validade ? String(l.data_validade).slice(0,10) : null).filter(Boolean).sort();
+    const vencido = datas.length && statusValidade(datas[0]).label === 'Vencido';
+    const distintas = new Set(datas).size;
+    return `<tr>
+      <td class="la-cod">${escAttr(g.produto_codigo||'—')}</td>
+      <td class="la-desc">${escAttr(g.produto_descricao)}</td>
+      <td class="la-qtd">${fmtQtd(g.qtd, g.unidade)} ${escAttr(g.unidade)}</td>
+      <td>${escAttr(g.volumesTxt)}</td>
+      <td style="white-space:nowrap">${datas.length ? fmtData(datas[0]) : '—'}${vencido ? '<div class="la-sub"><b>VENCIDO</b></div>' : ''}${distintas > 1 ? `<div class="la-sub">+${distintas-1} outra(s)</div>` : ''}</td>
+    </tr>`;
+  }).join('');
+  const agora = new Date();
+  document.getElementById('print-area').innerHTML = `
+    <div class="lista-a5">
+      <div class="la-cab">
+        <img src="${LOGO_BASE64}">
+        <div><div class="la-tit">Controle de armazenamento</div><div class="la-loc">${loc === '__sem__' ? 'Sem localização' : escAttr(loc)}</div></div>
+      </div>
+      <div class="la-meta"><span><b>Data:</b> ${agora.toLocaleDateString('pt-BR')}</span><span><b>Responsável:</b> ${escAttr(resp) || '______________'}</span></div>
+      <table>
+        <thead><tr><th>Cód.</th><th>Produto</th><th>Qtd.</th><th>Volumes</th><th>Validade</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <div class="la-rodape">Gerado pelo sistema em ${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} · ${grupos.length} produto(s)</div>
+    </div>`;
+  fecharModal();
+  window.print();
+}
 function cabecalhoRelatorioPDF(titulo, subtitulo){
   return `
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;border-bottom:2px solid #1e7e34;padding-bottom:10px">
