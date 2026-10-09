@@ -70,7 +70,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;font-size:11px;font-weight:600;color:#888;padding:0 12px 10px;border-bottom:1px solid #e5e5e0;text-transform:uppercase;letter-spacing:.04em}
 .th-sort{cursor:pointer;user-select:none}
 .th-sort:hover{color:#1a1a18}
-#s-estoque.active,#s-movimentacoes.active{display:flex;flex-direction:column;height:100%}
+#s-estoque.active,#s-movimentacoes.active,#s-pedidos.active{display:flex;flex-direction:column;height:100%}
 .content.content-compacto{padding:14px 20px}
 .est-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;flex:none}
 .est-titulo{font-size:18px;font-weight:600;margin:0}
@@ -747,17 +747,36 @@ tr:hover td{background:#fafaf7}
 
   <!-- PEDIDOS DE COMPRA -->
   <section class="screen" id="s-pedidos">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start">
-      <div>
-        <h1>Pedidos de Compra</h1>
-        <p class="sub">Gere pedidos, escolha fornecedor e itens — o operador recebe depois vinculando o código de barras</p>
-      </div>
-      <div style="display:flex;gap:8px">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#888"><input type="checkbox" id="ped-mostrar-todos" onchange="carregarPedidos()" style="width:auto"> Mostrar fechados</label>
-        <button class="btn btn-dark" onclick="abrirNovoPedido()">+ Novo pedido</button>
+    <div class="est-topo">
+      <h1 class="est-titulo">Pedidos de Compra</h1>
+      <div class="est-chips">
+        <span class="est-chip">Pedidos <b id="ped-total">—</b></span>
+        <span class="est-chip est-chip-filtrado">Valor <b id="ped-valor">—</b></span>
+        <button class="btn btn-dark btn-sm" onclick="abrirNovoPedido()">+ Novo pedido</button>
       </div>
     </div>
-    <div class="card"><table>
+    <div class="est-toolbar">
+      <input type="text" id="ped-filtro-busca" placeholder="Nº do pedido" oninput="renderPedidos()">
+      <select id="ped-filtro-status" onchange="renderPedidos()">
+        <option value="andamento">Em andamento</option>
+        <option value="">Todos os status</option>
+        <option value="aberto">Aguardando recebimento</option>
+        <option value="parcial">Recebido parcialmente</option>
+        <option value="recebido">Recebido</option>
+        <option value="concluido">Concluído (arquivado)</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+      <select id="ped-filtro-fornecedor" onchange="renderPedidos()"><option value="">Todos fornecedores</option></select>
+      <span class="est-rotulo">Entrega de</span>
+      <input type="date" id="ped-filtro-data-de" onchange="renderPedidos()">
+      <span class="est-rotulo">até</span>
+      <input type="date" id="ped-filtro-data-ate" onchange="renderPedidos()">
+      <span class="est-toolbar-espaco"></span>
+      <button class="btn-icone" title="Limpar filtros" aria-label="Limpar filtros" onclick="limparFiltrosPedidos()">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="est-tabela"><table class="tbl-estoque">
       <thead><tr><th>Pedido</th><th>Fornecedor</th><th>Entrega prevista</th><th>Itens</th><th>Valor total</th><th>Status</th><th></th></tr></thead>
       <tbody id="ped-tbody"></tbody>
     </table></div>
@@ -960,7 +979,7 @@ function showScreen(id){
   document.getElementById('s-'+id).classList.add('active');
   document.querySelector(`.nav-item[data-screen="${id}"]`).classList.add('active');
   const areaConteudo = document.querySelector('.content');
-  areaConteudo.classList.toggle('content-compacto', id === 'estoque' || id === 'movimentacoes');
+  areaConteudo.classList.toggle('content-compacto', id === 'estoque' || id === 'movimentacoes' || id === 'pedidos');
   areaConteudo.scrollTop = 0;
   const fn = CARREGADORES[id];
   if(fn){
@@ -2776,13 +2795,54 @@ const PEDIDO_STATUS_BADGE = { aberto:'badge-info', parcial:'badge-warn', recebid
 let pedidosCache = [];
 
 async function carregarPedidos(){
-  const todos = document.getElementById('ped-mostrar-todos').checked;
-  pedidosCache = await api('/api/pedidos' + (todos ? '?todos=1' : ''));
+  pedidosCache = await api('/api/pedidos?todos=1');
+  // popula fornecedores presentes nos pedidos, preservando a seleção atual
+  const sel = document.getElementById('ped-filtro-fornecedor');
+  const atual = sel.value;
+  const forn = new Map();
+  pedidosCache.forEach(p => { if(p.fornecedor_id) forn.set(String(p.fornecedor_id), p.fornecedor_nome||('#'+p.fornecedor_id)); });
+  sel.innerHTML = '<option value="">Todos fornecedores</option>' +
+    [...forn.entries()].sort((x,y)=>x[1].localeCompare(y[1],'pt-BR')).map(([id,n]) => `<option value="${id}">${escAttr(n)}</option>`).join('');
+  sel.value = forn.has(atual) ? atual : '';
+  renderPedidos();
+}
+
+function limparFiltrosPedidos(){
+  document.getElementById('ped-filtro-busca').value = '';
+  document.getElementById('ped-filtro-status').value = 'andamento';
+  document.getElementById('ped-filtro-fornecedor').value = '';
+  document.getElementById('ped-filtro-data-de').value = '';
+  document.getElementById('ped-filtro-data-ate').value = '';
+  renderPedidos();
+}
+
+function renderPedidos(){
   const ehGestor = sessaoUsuario.role==='admin' || sessaoUsuario.role==='planejador';
-  document.getElementById('ped-tbody').innerHTML = pedidosCache.map(p => `
+  const busca = document.getElementById('ped-filtro-busca').value.replace(/\D/g,'');
+  const st = document.getElementById('ped-filtro-status').value;
+  const forn = document.getElementById('ped-filtro-fornecedor').value;
+  const de = document.getElementById('ped-filtro-data-de').value;
+  const ate = document.getElementById('ped-filtro-data-ate').value;
+  const lista = pedidosCache.filter(p => {
+    if(busca && !String(p.id).includes(String(parseInt(busca,10)))) return false;
+    if(st === 'andamento'){ if(p.status==='concluido' || p.status==='cancelado') return false; }
+    else if(st && p.status !== st) return false;
+    if(forn && String(p.fornecedor_id) !== forn) return false;
+    if(de || ate){
+      const d = p.data_entrega_prevista ? String(p.data_entrega_prevista).slice(0,10) : '';
+      if(!d) return false;
+      if(de && d < de) return false;
+      if(ate && d > ate) return false;
+    }
+    return true;
+  });
+  document.getElementById('ped-total').textContent = lista.length;
+  const soma = lista.filter(p => p.status!=='cancelado').reduce((t,p) => t + (parseFloat(p.valor_total)||0), 0);
+  document.getElementById('ped-valor').textContent = fmtMoeda(soma);
+  document.getElementById('ped-tbody').innerHTML = lista.map(p => `
     <tr>
       <td>#${String(p.id).padStart(4,'0')}</td>
-      <td>${p.fornecedor_nome||'—'}</td>
+      <td class="c-trunc" title="${escAttr(p.fornecedor_nome||'')}">${escAttr(p.fornecedor_nome||'—')}</td>
       <td>${fmtData(p.data_entrega_prevista)}</td>
       <td>${p.total_itens}</td>
       <td>${fmtMoeda(p.valor_total)}</td>
